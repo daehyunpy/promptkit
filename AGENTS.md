@@ -30,24 +30,23 @@ Read before making changes.
 promptkit/
 ├── docs/
 │   └── product_requirements.md    # Product requirements
+├── source/
+│   └── promptkit/
+│       ├── __init__.py
+│       ├── cli.py                  # CLI entry point
+│       ├── sync.py                 # Sync command
+│       ├── build.py                # Build command
+│       ├── validate.py             # Validate command
+│       └── init.py                 # Init command
+├── tests/                          # Tests mirror source/ structure
+├── pyproject.toml                  # Python project config
+├── uv.lock                         # Locked dependencies
 ├── promptkit.yaml                  # Example/template config
 ├── .promptkit/
 │   └── cache/                      # Cached upstream prompts (gitignored)
 ├── .agents/                        # Canonical prompts (committed)
 ├── .cursor/                        # Generated Cursor artifacts
-├── .claude/                        # Generated Claude Code artifacts
-└── python/
-    ├── src/
-    │   └── promptkit/
-    │       ├── __init__.py
-    │       ├── cli.py              # CLI entry point
-    │       ├── sync.py             # Sync command
-    │       ├── build.py            # Build command
-    │       ├── validate.py         # Validate command
-    │       └── init.py             # Init command
-    ├── tests/                      # Tests mirror src/ structure
-    ├── pyproject.toml              # Python project config
-    └── uv.lock                     # Locked dependencies
+└── .claude/                        # Generated Claude Code artifacts
 ```
 
 ## MVP Commands
