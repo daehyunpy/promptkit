@@ -401,17 +401,57 @@ For MVP, we can start with a **manual registry** (hardcoded URLs or a local regi
 - CLI help text
 - Progress indicators
 
-## Open Questions
+## Implementation Decisions
+
+### Resolved
+
+1. **Prompt Fetching** - Fetch from GitHub repository (Anthropic hosts prompts there)
+   - Will use GitHub API or raw.githubusercontent.com
+   - Prompts stored in a known repository structure
+
+2. **Prompt Format** - Markdown with YAML frontmatter
+   ```markdown
+   ---
+   name: code-reviewer
+   description: Reviews code for bugs and style issues
+   author: Anthropic
+   version: 1.0.0
+   platforms:
+     - cursor
+     - claude-code
+   ---
+
+   # Code Reviewer Prompt
+
+   You are an expert code reviewer...
+   ```
+
+3. **Platform Mapping** - Direct copy (simple approach)
+   - Each prompt specifies which platform artifact type (skill, rule, agent, etc.)
+   - Copy markdown content directly to appropriate directory
+   - Platform-specific formatting added later if needed
+
+4. **Hash Algorithm** - SHA256 of content only (excluding timestamps)
+   - Standard, secure, widely supported
+   - Hash only the content section, not metadata
+
+5. **Progress Display** - Simple text output
+   - Print status messages: "Syncing prompt 1/3..."
+   - No fancy progress bars for MVP
+   - Can add `rich` library later for better UX
+
+6. **Git Integration** - Don't run git automatically
+   - Promptkit doesn't execute git commands
+   - User runs `git diff` themselves to see changes
+   - Keeps tool simple, no git dependency
+
+### Open Questions
 
 Need to resolve during implementation:
 
-1. **Claude Marketplace API** - How to fetch prompts? (API, GitHub, scraping, manual registry?)
-2. **Prompt Format** - What's the canonical format for prompts in cache? (Markdown, YAML, JSON?)
-3. **Platform Mapping** - How to map generic prompts to platform-specific formats? (Templates, direct copy, transformation rules?)
-4. **Hash Algorithm** - SHA256 for content hashing? Include metadata?
-5. **Error Handling** - How to handle network failures during sync? Retry logic?
-6. **Progress Display** - Use rich/tqdm for progress bars?
-7. **Git Integration** - Should CLI run git commands to show diffs automatically?
+1. **GitHub Repository Structure** - What's the actual repo URL and structure for Claude prompts?
+2. **Error Handling** - How to handle network failures, missing files, malformed YAML?
+3. **Artifact Type Mapping** - How does prompt metadata specify if it's a skill vs rule vs agent?
 
 ## Dependencies
 
@@ -432,22 +472,43 @@ While promptkit is Python-only (no Swift), we still benefit from defining contra
 
 ### Prompt Schema
 
-Define a canonical prompt schema that both cache and `.agents/` follow:
+Prompts use **Markdown with YAML frontmatter** format:
 
-```yaml
-# Canonical prompt format
+```markdown
+---
 name: code-reviewer
 description: Reviews code for bugs and style issues
 author: Anthropic
 version: 1.0.0
-content: |
-  # Code Reviewer Prompt
-
-  You are an expert code reviewer...
-
+artifact_type: skill  # skill, rule, agent, command, subagent
 platforms:
   - cursor
   - claude-code
+---
+
+# Code Reviewer Prompt
+
+You are an expert code reviewer. Review the following code for:
+- Bugs and logic errors
+- Code style and best practices
+- Performance issues
+
+When you find issues, explain:
+1. What the problem is
+2. Why it's a problem
+3. How to fix it
+
+Be constructive and specific in your feedback.
 ```
+
+**Key fields:**
+- `name` - Unique identifier for the prompt
+- `description` - Brief description (for display)
+- `author` - Prompt author/maintainer
+- `version` - Semantic version (for future version pinning)
+- `artifact_type` - Where to place it (skill, rule, agent, command, subagent)
+- `platforms` - Which platforms to generate for (cursor, claude-code)
+
+The content after `---` is the actual prompt text in Markdown.
 
 This ensures consistency and makes platform adapters simpler.
