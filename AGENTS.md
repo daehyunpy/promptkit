@@ -74,6 +74,54 @@ promptkit/
 - Don't add composition layers in v1 — that's post-MVP
 - Don't support platforms beyond Cursor and Claude Code in v1
 
+## Coding Disciplines
+
+This project follows three disciplines: **DDD**, **TDD**, and **Clean Code**. These govern how every line of code is written, not just how folders are organized.
+
+### DDD (Domain-Driven Design)
+
+- **Ubiquitous language** — use domain terms consistently. A `Prompt` is a `Prompt`, not a `Template` or `Config`. A `PromptSpec` is a `PromptSpec`, not a `Definition` or `Manifest`. If the domain term changes, rename everywhere.
+- **Entities vs Value Objects** — entities have identity (`Prompt` has an ID, persists, tracks state). Value objects are immutable data with no identity (`PromptMetadata`, `PlatformTarget`, `LockEntry`). Don't give value objects IDs.
+- **Aggregates** — `Prompt` is an aggregate root. Access its metadata and content through `Prompt`, not independently. Don't let outside code reach into aggregate internals.
+- **Domain logic in domain objects** — not in CLI handlers or builder code. If you're writing an `if` about prompt state in a command handler, it belongs in the domain layer.
+- **Domain layer has no outward dependencies** — domain code never imports infrastructure (file I/O, HTTP clients, YAML parsers). It depends only on protocols/interfaces.
+- **Domain errors** — use `PromptError`, `SyncError`, `BuildError`, `ValidationError`. Let them propagate to the application layer.
+
+### TDD (Test-Driven Development)
+
+- **Red → Green → Refactor** — every feature and bug fix starts with a failing test.
+- **Test naming** — describe behavior: `test_build_generates_cursor_artifacts`, not `test_build_method`.
+- **Test structure** — Arrange-Act-Assert. One assertion per test where practical.
+- **Unit tests** — domain logic in isolation, mock infrastructure. **Integration tests** — verify adapters work with real dependencies. **No tests for trivial code** — don't test getters, data classes, or framework glue.
+- **Test location** — tests live in a separate `tests/` directory that mirrors the `source/` structure (e.g., `tests/domain/test_prompt.py` tests `source/promptkit/domain/prompt.py`).
+- **Protocols enable testing** — every protocol (`PromptFetcher`, `ArtifactBuilder`, etc.) should have a test double.
+
+### Clean Code
+
+- **Naming** — names reveal intent. `fetch_prompt_from_source(source)` not `get(s)`. Booleans read as assertions: `is_valid`, `has_lock_file`.
+- **Functions** — do one thing. If it has "and" in its description, split it. Aim for < 20 lines.
+- **No dead code** — no commented-out code, no unused imports. Delete it; git remembers.
+- **No magic values** — `DEFAULT_CACHE_DIR = ".promptkit/cache"`, not bare `".promptkit/cache"`.
+- **Dependency direction** — CLI → App → Domain ← Infra. Never reverse.
+- **Single level of abstraction** — high-level functions call named functions; don't mix orchestration with details.
+- **Early return** — guard clauses over nested `if/else`.
+- **Immutability by default** — avoid mutation where practical (Python).
+
+## What NOT to Do
+
+- Don't add a web UI or GUI — CLI only
+- Don't add analytics, telemetry, or usage tracking
+- Don't add A/B testing or prompt optimization features
+- Don't add SaaS hosting or cloud service
+- Don't write code without a failing test first
+- Don't put domain logic in CLI handlers or builder code
+- Don't let domain code import infrastructure modules
+- Don't leave dead code, commented-out code, or unused imports
+- Don't use magic numbers or strings — name them
+- Don't add version pinning in v1 — that's post-MVP
+- Don't add composition layers in v1 — that's post-MVP
+- Don't support platforms beyond Cursor and Claude Code in v1
+
 ## Git Workflow
 
 - **`main`** — production-ready code
@@ -81,14 +129,7 @@ promptkit/
 - **Feature branches** — `feature/<name>` off main/develop
 - **Commit style** — conventional commits: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`
 - **Keep commits focused** — one logical change per commit
-
-## Coding Style
-
-- Follow Python best practices (PEP 8)
-- Use type hints where appropriate
-- Write clear, descriptive function and variable names
-- Keep functions focused and small
-- Write tests for core functionality
+- **No direct pushes** to `main` or `develop`
 
 ## Success Criteria
 
