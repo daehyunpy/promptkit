@@ -1,0 +1,4 @@
+# direnv configuration
+# Copy this to .envrc and run: direnv allow
+
+dotenv
