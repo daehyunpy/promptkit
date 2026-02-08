@@ -142,43 +142,9 @@ A new prompt version introduces unexpected behavior. The developer uses git to r
 
 ## Architecture Overview
 
-promptkit is a Python-based CLI tool with a three-layer architecture:
+promptkit is a Python-based CLI tool with a three-layer architecture (config, source, output). It follows Domain-Driven Design principles with clear separation between domain logic, application use cases, and infrastructure adapters.
 
-### Layers
-
-**Config Layer** - Declarative configuration and version locking
-```
-promptkit.yaml          # Declares which prompts to use and target platforms
-promptkit.lock          # Locks exact versions/hashes for reproducibility
-```
-
-**Source Layer** - Prompt sources (synced + canonical)
-```
-.promptkit/cache/       # Cached upstream prompts (gitignored)
-.agents/                # Canonical/custom prompts (committed to git)
-```
-
-**Output Layer** - Generated platform-specific artifacts
-```
-.cursor/                # Generated Cursor artifacts (agents, skills-cursor, rules, commands)
-.claude/                # Generated Claude Code artifacts (skills, rules, subagents, commands)
-```
-
-### Workflow
-
-1. **Sync** - `promptkit sync` fetches upstream prompts from sources (Claude plugin marketplace) and stores them in `.promptkit/cache/`. Updates `promptkit.lock` with versions/hashes.
-
-2. **Define** - Users write canonical/custom prompts in `.agents/` (committed to version control).
-
-3. **Build** - `promptkit build` reads from both `.promptkit/cache/` (upstream) and `.agents/` (canonical), merges them according to `promptkit.yaml`, and generates platform-specific outputs in `.cursor/` and `.claude/`.
-
-### What Gets Committed to Git
-
-- ✅ `promptkit.yaml` - config
-- ✅ `promptkit.lock` - version locks
-- ✅ `.agents/` - canonical prompts
-- ❌ `.promptkit/cache/` - cached upstream prompts (reproducible via lock file)
-- ⚠️  `.cursor/`, `.claude/` - generated artifacts (recommended to gitignore, but user's choice)
+For detailed architecture, directory layout, DDD layers, schemas, and build process, see [`technical_design.md`](technical_design.md).
 
 ## Non-Goals (v1)
 

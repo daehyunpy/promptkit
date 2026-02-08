@@ -9,8 +9,9 @@ Instructions for AI agents working on this codebase. `CLAUDE.md` is a symlink to
 ## Key Docs
 
 - `docs/product_requirements.md` — what to build and why
+- `docs/technical_design.md` — how to build it (architecture, DDD layers, schemas, build process)
 
-Read before making changes.
+Read both before making changes.
 
 ## Current State
 
