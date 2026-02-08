@@ -20,6 +20,9 @@ venv/
 # promptkit cache
 .promptkit/cache/
 
+# Claude Code settings (local overrides)
+.claude/settings.local.json
+
 # Generated artifacts (optional - users can uncomment if they want to gitignore)
 # .cursor/
 # .claude/
