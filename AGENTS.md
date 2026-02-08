@@ -17,13 +17,51 @@ Read both before making changes.
 
 **Pre-implementation.** No code written yet. Currently in planning phase.
 
+**Next Steps:**
+- Review `docs/product_requirements.md` and `docs/technical_design.md`
+- Use `/opsx:new <change-name>` to start new features
+- Follow TDD: write failing test → implement → refactor
+
 ## Tech Stack
 
-- **Language**: Python
+- **Language**: Python 3.13
 - **Package Manager**: uv
-- **CLI Framework**: TBD (typer, click, or argparse)
+- **CLI Framework**: typer (modern type-safe CLI)
 - **Config Format**: YAML (promptkit.yaml)
+- **Config Management**: pydantic-settings
 - **Target Platforms**: Cursor (`.cursor/`), Claude Code (`.claude/`)
+
+## Development Setup
+
+```bash
+# Requires Python 3.13+ and uv package manager
+# Install uv: https://docs.astral.sh/uv/
+
+# Create virtual environment and install dependencies (when pyproject.toml exists)
+uv sync                      # Install all dependencies including dev
+
+# (Optional) Environment variables - if needed
+cp .env.example .env         # Create .env file
+direnv allow                 # Load environment variables (requires direnv)
+```
+
+## Common Commands
+
+```bash
+# Run tests (TDD workflow)
+uv run pytest -x             # Run tests, stop on first failure
+uv run pytest -v             # Verbose output
+uv run pytest tests/domain/  # Run specific test directory
+uv run pytest -k test_name   # Run tests matching name pattern
+
+# Type checking
+uv run pyright               # Type check all code
+
+# Linting and formatting
+uv run ruff check .          # Check for issues
+uv run ruff format .         # Auto-format code
+uv run ruff check --fix .    # Auto-fix issues
+```
 
 ## Project Structure
 
@@ -65,16 +103,6 @@ promptkit/
 2. **Define** - Write canonical prompts in `.agents/`
 3. **Build** - Generate platform-specific artifacts in `.cursor/` and `.claude/`
 
-## What NOT to Do
-
-- Don't add a web UI or GUI — CLI only
-- Don't add analytics, telemetry, or usage tracking
-- Don't add A/B testing or prompt optimization features
-- Don't add SaaS hosting or cloud service
-- Don't add version pinning in v1 — always sync latest
-- Don't add composition layers in v1 — that's post-MVP
-- Don't support platforms beyond Cursor and Claude Code in v1
-
 ## Coding Disciplines
 
 This project follows three disciplines: **DDD**, **TDD**, and **Clean Code**. These govern how every line of code is written, not just how folders are organized.
@@ -85,6 +113,21 @@ This project follows three disciplines: **DDD**, **TDD**, and **Clean Code**. Th
 - **Entities vs Value Objects** — entities have identity (`Prompt` has an ID, persists, tracks state). Value objects are immutable data with no identity (`PromptMetadata`, `PlatformTarget`, `LockEntry`). Don't give value objects IDs.
 - **Aggregates** — `Prompt` is an aggregate root. Access its metadata and content through `Prompt`, not independently. Don't let outside code reach into aggregate internals.
 - **Domain logic in domain objects** — not in CLI handlers or builder code. If you're writing an `if` about prompt state in a command handler, it belongs in the domain layer.
+
+  **Example:**
+  ```python
+  # ✅ Good: Domain logic in domain object
+  # In domain/prompt.py
+  class Prompt:
+      def is_valid_for_platform(self, platform: PlatformTarget) -> bool:
+          return platform in self.spec.platforms
+
+  # ❌ Bad: Domain logic in CLI handler
+  # In cli.py
+  if prompt.spec.platforms and platform in prompt.spec.platforms:
+      ...  # This logic should be in Prompt class
+  ```
+
 - **Domain layer has no outward dependencies** — domain code never imports infrastructure (file I/O, HTTP clients, YAML parsers). It depends only on protocols/interfaces.
 - **Domain errors** — use `PromptError`, `SyncError`, `BuildError`, `ValidationError`. Let them propagate to the application layer.
 
@@ -110,18 +153,21 @@ This project follows three disciplines: **DDD**, **TDD**, and **Clean Code**. Th
 
 ## What NOT to Do
 
+**Product Scope:**
 - Don't add a web UI or GUI — CLI only
 - Don't add analytics, telemetry, or usage tracking
 - Don't add A/B testing or prompt optimization features
 - Don't add SaaS hosting or cloud service
+- Don't add version pinning in v1 — always sync latest
+- Don't add composition layers in v1 — that's post-MVP
+- Don't support platforms beyond Cursor and Claude Code in v1
+
+**Code Quality:**
 - Don't write code without a failing test first
 - Don't put domain logic in CLI handlers or builder code
 - Don't let domain code import infrastructure modules
 - Don't leave dead code, commented-out code, or unused imports
 - Don't use magic numbers or strings — name them
-- Don't add version pinning in v1 — that's post-MVP
-- Don't add composition layers in v1 — that's post-MVP
-- Don't support platforms beyond Cursor and Claude Code in v1
 
 ## Git Workflow
 
