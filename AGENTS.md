@@ -102,6 +102,20 @@ The MVP is complete when:
 6. Validation catches config errors before build
 7. Init command scaffolds project structure
 
+## OpenSpec
+
+This project uses OpenSpec for spec-driven development. All non-trivial changes go through this workflow. Trivial fixes (typos, single-line bugs) can skip it.
+
+| Step | Command | What it does |
+|------|---------|--------------|
+| 1 | `/opsx:new <name>` | Create a new change with a kebab-case name (e.g., `/opsx:new add-sync-command`) |
+| 2 | `/opsx:ff` | Generate all spec artifacts (requirements, design, tasks) in one pass |
+| 3 | `/opsx:apply` | Implement the tasks from the generated spec |
+| 4 | `/opsx:verify` | Verify implementation matches the spec artifacts |
+| 5 | `/opsx:archive` | Archive the completed change |
+
+Artifacts are stored in `openspec/changes/` during development and moved to `openspec/changes/archive/` when done.
+
 ## Open Questions
 
 These need to be resolved during implementation:
