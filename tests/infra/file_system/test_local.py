@@ -1,0 +1,77 @@
+"""Tests for file system operations."""
+
+from pathlib import Path
+
+from promptkit.infra.file_system.local import FileSystem
+
+
+def test_create_directory_creates_nested_dirs(tmp_path: Path) -> None:
+    """create_directory should create nested directories."""
+    fs = FileSystem()
+    target = tmp_path / "a" / "b" / "c"
+
+    fs.create_directory(target)
+
+    assert target.exists()
+    assert target.is_dir()
+
+
+def test_create_directory_is_idempotent(tmp_path: Path) -> None:
+    """create_directory should not fail if directory already exists."""
+    fs = FileSystem()
+    target = tmp_path / "existing"
+
+    fs.create_directory(target)
+    fs.create_directory(target)  # Should not raise
+
+    assert target.exists()
+
+
+def test_write_file_creates_file_with_content(tmp_path: Path) -> None:
+    """write_file should create file with given content."""
+    fs = FileSystem()
+    target = tmp_path / "test.txt"
+
+    fs.write_file(target, "hello world")
+
+    assert target.exists()
+    assert target.read_text() == "hello world"
+
+
+def test_write_file_creates_parent_directories(tmp_path: Path) -> None:
+    """write_file should create parent directories if needed."""
+    fs = FileSystem()
+    target = tmp_path / "nested" / "dir" / "file.txt"
+
+    fs.write_file(target, "content")
+
+    assert target.exists()
+    assert target.read_text() == "content"
+
+
+def test_file_exists_returns_true_for_existing_file(tmp_path: Path) -> None:
+    """file_exists should return True for existing files."""
+    fs = FileSystem()
+    target = tmp_path / "exists.txt"
+    target.write_text("content")
+
+    assert fs.file_exists(target) is True
+
+
+def test_file_exists_returns_false_for_missing_file(tmp_path: Path) -> None:
+    """file_exists should return False for missing files."""
+    fs = FileSystem()
+    target = tmp_path / "missing.txt"
+
+    assert fs.file_exists(target) is False
+
+
+def test_append_to_file_appends_content(tmp_path: Path) -> None:
+    """append_to_file should append content to existing file."""
+    fs = FileSystem()
+    target = tmp_path / "append.txt"
+    target.write_text("first\n")
+
+    fs.append_to_file(target, "second\n")
+
+    assert target.read_text() == "first\nsecond\n"

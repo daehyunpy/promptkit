@@ -1,0 +1,28 @@
+"""Local file system implementation."""
+
+from pathlib import Path
+
+
+class FileSystem:
+    """Local file system implementation.
+
+    Implements the FileSystem protocol defined in domain layer.
+    """
+
+    def create_directory(self, path: Path, /) -> None:
+        """Create directory, including parent directories if needed."""
+        path.mkdir(parents=True, exist_ok=True)
+
+    def write_file(self, path: Path, content: str, /) -> None:
+        """Write content to file, creating parent directories if needed."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+
+    def file_exists(self, path: Path, /) -> bool:
+        """Check if file exists."""
+        return path.exists()
+
+    def append_to_file(self, path: Path, content: str, /) -> None:
+        """Append content to existing file."""
+        with path.open("a") as f:
+            f.write(content)
