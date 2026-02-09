@@ -40,7 +40,7 @@ promptkit.lock          # Locks exact versions/hashes for reproducibility
 **Source Layer** - Prompt sources (synced + canonical)
 ```
 .promptkit/cache/       # Cached remote prompts (gitignored)
-.agents/                # Local/custom prompts (committed to git, auto-built)
+prompts/                # Local/custom prompts (committed to git, auto-built)
 ```
 
 **Output Layer** - Generated platform-specific artifacts
@@ -78,7 +78,7 @@ Manifest (promptkit.yaml)  →  Lockfile (promptkit.lock)  →  Artifacts (.curs
 
 3. **Sync** - `promptkit sync` fetches prompts from registries, caches them in `.promptkit/cache/`, updates `promptkit.lock` with content hashes, and generates platform-specific artifacts in `.cursor/` and `.claude/`.
 
-4. **Define** - Users write local prompts in `.agents/` (committed to version control). These are automatically included in every build — no config entry needed.
+4. **Define** - Users write local prompts in `prompts/` (committed to version control). These are automatically included in every build — no config entry needed.
 
 5. **Rebuild** - After config changes or git operations, `promptkit build` regenerates artifacts from cache without re-fetching.
 
@@ -86,7 +86,7 @@ Manifest (promptkit.yaml)  →  Lockfile (promptkit.lock)  →  Artifacts (.curs
 
 - ✅ `promptkit.yaml` - config
 - ✅ `promptkit.lock` - version locks
-- ✅ `.agents/` - local/custom prompts
+- ✅ `prompts/` - local/custom prompts
 - ❌ `.promptkit/cache/` - cached remote prompts (reproducible via lock file)
 - ⚠️  `.cursor/`, `.claude/` - generated artifacts (recommended to gitignore, but user's choice)
 
@@ -142,7 +142,7 @@ platforms:
 - `name` defaults to the part after `/` in the source
 - `platforms` defaults to all platforms defined in the config
 - `artifact_type` is NOT in the config — it comes from the prompt's frontmatter
-- `.agents/` prompts are auto-included — no config entry needed
+- `prompts/` prompts are auto-included — no config entry needed
 - `@version` syntax reserved for future version pinning (MVP always fetches latest)
 
 **Short forms:**
@@ -212,7 +212,7 @@ local:
     fetched_at: '2026-02-08T15:00:00+00:00'
 ```
 
-Lock file tracks both remote prompts (from registries) and local prompts (from `.agents/`).
+Lock file tracks both remote prompts (from registries) and local prompts (from `prompts/`).
 
 ## Prompt Format
 
@@ -238,7 +238,7 @@ Be constructive and specific in your feedback.
 - `description` - Brief description (for display)
 - `author` - Prompt author/maintainer
 
-The `name` comes from the filename (e.g., `code-review.md` → name `code-review`), not frontmatter. This matches how `.agents/` files work — the filename IS the identity.
+The `name` comes from the filename (e.g., `code-review.md` → name `code-review`), not frontmatter. This matches how `prompts/` files work — the filename IS the identity.
 
 The entire file (including frontmatter) is the content that gets hashed and cached.
 
@@ -251,9 +251,9 @@ The prompt's category (skills, commands, rules, agents) is determined by **direc
 - `plugins/code-review/commands/review.md` → it's a command
 - `skills/pdf/SKILL.md` → it's a skill
 
-**Local prompts** — users organize `.agents/` by subdirectory:
+**Local prompts** — users organize `prompts/` by subdirectory:
 ```
-.agents/
+prompts/
   skills/my-skill.md
   commands/my-command.md
   rules/my-rule.md
@@ -269,7 +269,7 @@ Build is a deterministic, offline operation. It reads cached/local prompts and g
 
 1. **Load Config** - Parse `promptkit.yaml` for platform definitions
 2. **Load Lock** - Parse `promptkit.lock` for content hashes (verification)
-3. **Read Prompts** - Load prompt content from `.promptkit/cache/` (remote) and `.agents/` (local)
+3. **Read Prompts** - Load prompt content from `.promptkit/cache/` (remote) and `prompts/` (local)
 4. **Route** - Map each prompt's source category directory to the correct platform output directory
 5. **Generate** - Write artifacts to platform output directories
 
@@ -319,7 +319,7 @@ This preserves deterministic builds while allowing intelligent adaptation. Not n
    - Compare with existing lock entry
    - If changed or new: update cache in `.promptkit/cache/` and create new lock entry
    - If unchanged: keep existing lock entry (preserves `fetched_at`)
-4. For each local prompt (`.agents/*.md`):
+4. For each local prompt (`prompts/*.md`):
    - Read file content
    - Compute SHA256 hash
    - Update lock entry if changed
@@ -401,7 +401,7 @@ promptkit/
 │
 ├── promptkit.yaml                    # Config
 ├── .promptkit/cache/                 # Cached remote prompts (gitignored)
-├── .agents/                          # Local prompts (committed, auto-built)
+├── prompts/                          # Local prompts (committed, auto-built)
 ├── .cursor/                          # Generated Cursor artifacts
 └── .claude/                          # Generated Claude Code artifacts
 ```
@@ -598,14 +598,14 @@ promptkit = "promptkit.cli:app"
    - MVP registries: `anthropic-agent-skills` (anthropics/skills), `claude-plugins-official` (anthropics/claude-plugins-official)
    - Short forms supported: registries `key: <url>`, platforms `key: <output_dir>` or `key:` (minimal)
 
-2. **Local prompts auto-included** - Everything in `.agents/` is built automatically
+2. **Local prompts auto-included** - Everything in `prompts/` is built automatically
    - No config entry needed for local prompts
-   - `.agents/` is scanned during both `lock` and `build`
+   - `prompts/` is scanned during both `lock` and `build`
 
 3. **Directory-based routing, no `artifact_type`**
    - The prompt's category (skills, commands, rules, agents) is determined by its source directory structure
    - Remote: fetcher knows from the repo path (e.g., `plugins/code-review/commands/`)
-   - Local: user organizes `.agents/` by subdirectory (e.g., `.agents/skills/`, `.agents/commands/`)
+   - Local: user organizes `prompts/` by subdirectory (e.g., `prompts/skills/`, `prompts/commands/`)
    - No frontmatter parsing needed for routing — simpler model, matches how upstream repos work
 
 4. **Frontmatter is optional metadata only**

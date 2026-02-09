@@ -77,7 +77,7 @@ High-quality prompts exist in the Claude plugin marketplace and official documen
 
 6. **Validation**
    - `promptkit validate` checks that `promptkit.yaml` is well-formed
-   - Verifies all referenced prompts exist in `.promptkit/cache/` or `.agents/`
+   - Verifies all referenced prompts exist in `.promptkit/cache/` or `prompts/`
    - Catches configuration errors before build
 
 7. **Project Scaffolding**
@@ -86,7 +86,7 @@ High-quality prompts exist in the Claude plugin marketplace and official documen
      promptkit.yaml          # declarative config
      promptkit.lock          # lock file
      .promptkit/cache/       # cached upstream prompts
-     .agents/                # canonical/custom prompts
+     prompts/                # canonical/custom prompts
      .cursor/                # generated Cursor artifacts
      .claude/                # generated Claude Code artifacts
      ```
@@ -181,7 +181,7 @@ promptkit is successful when:
 
 1. **No tool lock-in** - Same prompt works in both Cursor and Claude Code without manual duplication. Can switch platforms by changing config and rebuilding.
 
-2. **Single source of truth** - Canonical prompts live in `.agents/`, clearly separated from generated artifacts (`.cursor/`, `.claude/`).
+2. **Single source of truth** - Canonical prompts live in `prompts/`, clearly separated from generated artifacts (`.cursor/`, `.claude/`).
 
 3. **Deterministic and reproducible** - Same `promptkit.yaml` + `promptkit.lock` produces identical outputs across machines and over time.
 
@@ -191,4 +191,4 @@ promptkit is successful when:
 
 6. **Reusable prompt library** - Can use multiple prompts together in a single project, and share configurations across projects with consistent results.
 
-7. **Version control friendly** - All meaningful changes are trackable in git (yaml, lock, .agents). No binary files or opaque artifacts in version control.
+7. **Version control friendly** - All meaningful changes are trackable in git (yaml, lock, prompts/). No binary files or opaque artifacts in version control.

@@ -103,7 +103,7 @@ promptkit/
 ├── promptkit.yaml                  # Example/template config
 ├── .promptkit/
 │   └── cache/                      # Cached upstream prompts (gitignored)
-├── .agents/                        # Canonical prompts (committed)
+├── prompts/                        # Local prompts (committed)
 ├── .cursor/                        # Generated Cursor artifacts
 └── .claude/                        # Generated Claude Code artifacts
 ```
@@ -123,7 +123,7 @@ promptkit/
 1. **Init** - `promptkit init` scaffolds project with config and directories
 2. **Configure** - Edit `promptkit.yaml` to declare prompts and platforms
 3. **Sync** - `promptkit sync` fetches, locks, and builds everything
-4. **Define** - Write canonical prompts in `.agents/`
+4. **Define** - Write local prompts in `prompts/`
 5. **Rebuild** - `promptkit build` regenerates artifacts without re-fetching
 
 ## Coding Disciplines

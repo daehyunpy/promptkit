@@ -41,7 +41,7 @@ def test_init_command_creates_expected_files(working_dir: Path) -> None:
     assert result.exit_code == 0
 
     assert (working_dir / ".promptkit" / "cache").exists()
-    assert (working_dir / ".agents").exists()
+    assert (working_dir / "prompts").exists()
     assert (working_dir / ".cursor").exists()
     assert (working_dir / ".claude").exists()
     assert (working_dir / "promptkit.yaml").exists()

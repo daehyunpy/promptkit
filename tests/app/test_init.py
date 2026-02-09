@@ -15,11 +15,11 @@ def _make_use_case() -> InitProject:
 
 
 def test_execute_creates_all_required_directories(tmp_path: Path) -> None:
-    """execute should create .promptkit/cache/, .agents/, .cursor/, .claude/."""
+    """execute should create .promptkit/cache/, prompts/, .cursor/, .claude/."""
     _make_use_case().execute(tmp_path)
 
     assert (tmp_path / ".promptkit" / "cache").exists()
-    assert (tmp_path / ".agents").exists()
+    assert (tmp_path / "prompts").exists()
     assert (tmp_path / ".cursor").exists()
     assert (tmp_path / ".claude").exists()
 
@@ -83,5 +83,5 @@ def test_execute_does_not_modify_files_when_config_exists(tmp_path: Path) -> Non
     with pytest.raises(InitProjectError):
         _make_use_case().execute(tmp_path)
 
-    assert not (tmp_path / ".agents").exists()
+    assert not (tmp_path / "prompts").exists()
     assert not (tmp_path / ".cursor").exists()

@@ -11,11 +11,11 @@ LOCK_FILENAME = "promptkit.lock"
 GITIGNORE_FILENAME = ".gitignore"
 
 CACHE_DIR = ".promptkit/cache"
-AGENTS_DIR = ".agents"
+PROMPTS_DIR = "prompts"
 CURSOR_DIR = ".cursor"
 CLAUDE_DIR = ".claude"
 
-SCAFFOLD_DIRS = (CACHE_DIR, AGENTS_DIR, CURSOR_DIR, CLAUDE_DIR)
+SCAFFOLD_DIRS = (CACHE_DIR, PROMPTS_DIR, CURSOR_DIR, CLAUDE_DIR)
 
 LOCK_FILE_CONTENT = "# promptkit lock file\nversion: 1\nprompts: []\n"
 GITIGNORE_ENTRY = "\n# promptkit\n.promptkit/cache/\n"
