@@ -216,11 +216,10 @@ Lock file tracks both remote prompts (from registries) and local prompts (from `
 
 ## Prompt Format
 
-Prompts use **Markdown with YAML frontmatter**. The frontmatter declares metadata including `artifact_type`, which determines where the prompt is placed in each platform's directory structure.
+Prompts are **Markdown files** (`.md`). They may optionally include YAML frontmatter for metadata (description, author), but it's not required.
 
 ```markdown
 ---
-artifact_type: skill
 description: Reviews code for bugs and style issues
 author: Anthropic
 ---
@@ -236,13 +235,31 @@ Be constructive and specific in your feedback.
 ```
 
 **Frontmatter fields (all optional):**
-- `artifact_type` - Where to place the prompt: `skill`, `rule`, `agent`, `command`, `subagent` (defaults to `skill`)
 - `description` - Brief description (for display)
 - `author` - Prompt author/maintainer
 
 The `name` comes from the filename (e.g., `code-review.md` → name `code-review`), not frontmatter. This matches how `.agents/` files work — the filename IS the identity.
 
-The entire file (including frontmatter) is the content that gets hashed and cached. Frontmatter is parsed at build time to determine artifact routing.
+The entire file (including frontmatter) is the content that gets hashed and cached.
+
+### Directory-Based Routing
+
+The prompt's category (skills, commands, rules, agents) is determined by **directory structure**, not metadata:
+
+**Remote prompts** — the source repo's directory structure tells us the category:
+- `plugins/code-review/skills/review/SKILL.md` → it's a skill
+- `plugins/code-review/commands/review.md` → it's a command
+- `skills/pdf/SKILL.md` → it's a skill
+
+**Local prompts** — users organize `.agents/` by subdirectory:
+```
+.agents/
+  skills/my-skill.md
+  commands/my-command.md
+  rules/my-rule.md
+```
+
+This mirrors how the upstream repos work — no need for an `artifact_type` field.
 
 ## Build System
 
@@ -253,23 +270,22 @@ Build is a deterministic, offline operation. It reads cached/local prompts and g
 1. **Load Config** - Parse `promptkit.yaml` for platform definitions
 2. **Load Lock** - Parse `promptkit.lock` for content hashes (verification)
 3. **Read Prompts** - Load prompt content from `.promptkit/cache/` (remote) and `.agents/` (local)
-4. **Parse Frontmatter** - Extract `artifact_type` from each prompt's YAML frontmatter
-5. **Route** - Map each prompt to the correct output directory based on `artifact_type` and platform type
-6. **Generate** - Write artifacts to platform output directories
+4. **Route** - Map each prompt's source category directory to the correct platform output directory
+5. **Generate** - Write artifacts to platform output directories
 
 Build does **not** transform prompt content. It copies content to the correct platform directory. This keeps builds deterministic — same inputs always produce identical outputs.
 
 ### Platform Artifact Mapping
 
-Each `artifact_type` (from frontmatter) maps to a specific subdirectory per platform:
+Each source category maps to a platform-specific subdirectory:
 
-| ArtifactType | Cursor output | Claude Code output |
+| Source category | Cursor output | Claude Code output |
 |---|---|---|
-| `skill` | `.cursor/skills-cursor/<name>.md` | `.claude/skills/<name>.md` |
-| `rule` | `.cursor/rules/<name>.md` | `.claude/rules/<name>.md` |
-| `agent` | `.cursor/agents/<name>.md` | `.claude/agents/<name>.md` |
-| `command` | `.cursor/commands/<name>.md` | `.claude/commands/<name>.md` |
-| `subagent` | `.cursor/subagents/<name>.md` | `.claude/subagents/<name>.md` |
+| `skills/` | `.cursor/skills-cursor/<name>.md` | `.claude/skills/<name>.md` |
+| `rules/` | `.cursor/rules/<name>.md` | `.claude/rules/<name>.md` |
+| `agents/` | `.cursor/agents/<name>.md` | `.claude/agents/<name>.md` |
+| `commands/` | `.cursor/commands/<name>.md` | `.claude/commands/<name>.md` |
+| `subagents/` | `.cursor/subagents/<name>.md` | `.claude/subagents/<name>.md` |
 
 ### Determinism
 
@@ -397,7 +413,7 @@ promptkit/
 Pure business logic. No dependencies on infrastructure.
 
 **Entities:**
-- `Prompt` - Aggregate root. Identity via name. Holds content, artifact_type (from frontmatter), and platform targeting.
+- `Prompt` - Aggregate root. Identity via name. Holds content and platform targeting.
 
 **Value Objects:**
 - `PromptSpec` - Immutable prompt specification from config (source, optional name, optional platforms)
@@ -406,7 +422,6 @@ Pure business logic. No dependencies on infrastructure.
 - `Registry` - Immutable registry definition (name, type, url)
 - `PlatformConfig` - Immutable platform definition (name, type, output_dir)
 - `PlatformTarget` - Enum (CURSOR, CLAUDE_CODE)
-- `ArtifactType` - Enum (SKILL, RULE, AGENT, COMMAND, SUBAGENT)
 
 **Protocols:**
 - `PromptFetcher` - Protocol for fetching prompts from registries
@@ -587,14 +602,15 @@ promptkit = "promptkit.cli:app"
    - No config entry needed for local prompts
    - `.agents/` is scanned during both `lock` and `build`
 
-3. **`artifact_type` comes from prompt frontmatter, not config**
-   - Prompt files declare their own type via YAML frontmatter
-   - Config just says "use this prompt" — the source defines what it is
-   - Matches how plugins work: the plugin knows what it is
+3. **Directory-based routing, no `artifact_type`**
+   - The prompt's category (skills, commands, rules, agents) is determined by its source directory structure
+   - Remote: fetcher knows from the repo path (e.g., `plugins/code-review/commands/`)
+   - Local: user organizes `.agents/` by subdirectory (e.g., `.agents/skills/`, `.agents/commands/`)
+   - No frontmatter parsing needed for routing — simpler model, matches how upstream repos work
 
-4. **Frontmatter is parsed at build time**
+4. **Frontmatter is optional metadata only**
+   - Frontmatter may contain `description`, `author` — purely informational
    - Entire file (including frontmatter) is hashed and cached as-is
-   - Frontmatter parsed during build to extract `artifact_type` for routing
    - Hash covers the full file content
 
 5. **Version pinning uses `@` syntax** (post-MVP)
@@ -602,8 +618,8 @@ promptkit = "promptkit.cli:app"
    - MVP always fetches latest from registry
 
 6. **Platform Mapping** - Deterministic copy + route (no transformation)
-   - Each prompt's frontmatter specifies `artifact_type`
-   - Copy content directly to appropriate directory based on artifact_type
+   - Each prompt's source category directory determines the output subdirectory
+   - Builder maps source categories to platform-specific paths (e.g., `skills/` → `skills-cursor/` for Cursor)
    - No AI transformation in the build pipeline for MVP
 
 7. **Hash Algorithm** - SHA256 of full file content (including frontmatter)
@@ -634,7 +650,7 @@ promptkit = "promptkit.cli:app"
     - Malformed YAML → `ValidationError`
     - Missing files → `BuildError`
 
-14. **Frontmatter is optional** - `artifact_type` defaults to `skill` if frontmatter is missing
+14. **Frontmatter is optional metadata** - Only contains `description` and `author`; no routing logic
 
 15. **Frontmatter stripped in build output** - Each platform builder decides whether to strip frontmatter; platforms that don't understand it get clean content
 

@@ -1,32 +1,8 @@
-"""Domain layer: PromptSpec value object and ArtifactType enum."""
+"""Domain layer: PromptSpec value object."""
 
 from dataclasses import dataclass, field
-from enum import Enum
 
 from promptkit.domain.platform_target import PlatformTarget
-
-
-class ArtifactType(Enum):
-    """Type of artifact a prompt produces in a platform."""
-
-    SKILL = "skill"
-    RULE = "rule"
-    AGENT = "agent"
-    COMMAND = "command"
-    SUBAGENT = "subagent"
-
-    @classmethod
-    def from_string(cls, value: str, /) -> "ArtifactType":
-        """Create ArtifactType from string value.
-
-        Raises:
-            ValueError: If value doesn't match any artifact type.
-        """
-        for member in cls:
-            if member.value == value:
-                return member
-        valid = ", ".join(m.value for m in cls)
-        raise ValueError(f"Unknown artifact type: '{value}'. Valid types: {valid}")
 
 
 @dataclass(frozen=True)

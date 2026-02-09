@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 from promptkit.domain.platform_target import PlatformTarget
 from promptkit.domain.prompt_metadata import PromptMetadata
-from promptkit.domain.prompt_spec import ArtifactType, PromptSpec
+from promptkit.domain.prompt_spec import PromptSpec
 
 HASH_PREFIX = "sha256:"
 
@@ -17,15 +17,11 @@ class Prompt:
     A Prompt has identity (via its spec name), holds content fetched from a source,
     and knows which platforms it targets. All access to prompt data goes through
     this aggregate.
-
-    artifact_type is optional — it comes from the prompt's frontmatter and is
-    populated at build time, not at fetch/lock time.
     """
 
     spec: PromptSpec
     content: str
     metadata: PromptMetadata | None = field(default=None)
-    artifact_type: ArtifactType | None = field(default=None)
 
     @property
     def name(self) -> str:

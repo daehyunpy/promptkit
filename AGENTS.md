@@ -19,7 +19,7 @@ Read both before making changes.
 
 **Completed:**
 - Phase 1-2: Project scaffold + `promptkit init` command
-- Phase 3: Domain model (Prompt, PromptSpec, LockEntry, PlatformTarget, ArtifactType, errors, protocols)
+- Phase 3: Domain model (Prompt, PromptSpec, LockEntry, Registry, PlatformConfig, PlatformTarget, errors, protocols)
 - Phase 4: Config loading (YamlLoader, LockFile reader/writer)
 
 **Next Steps:**
@@ -81,7 +81,7 @@ promptkit/
 │       ├── cli.py                  # CLI entry point
 │       ├── domain/                 # Domain layer (pure business logic)
 │       │   ├── prompt.py           # Prompt aggregate root
-│       │   ├── prompt_spec.py      # PromptSpec value object + ArtifactType enum
+│       │   ├── prompt_spec.py      # PromptSpec value object
 │       │   ├── prompt_metadata.py  # PromptMetadata value object
 │       │   ├── lock_entry.py       # LockEntry value object
 │       │   ├── platform_target.py  # PlatformTarget enum
@@ -232,10 +232,10 @@ Artifacts are stored in `openspec/changes/` during development and moved to `ope
 - **CLI framework**: typer (modern type-safe CLI)
 - **Fetch from Claude marketplace**: GitHub-hosted registries, stub fetcher for initial phases (needs research)
 - **Lock file format**: YAML (`promptkit.lock`)
-- **Prompt metadata**: YAML frontmatter (author, description, artifact_type)
-- **Platform-specific mapping**: artifact_type from frontmatter routes to platform subdirectories (deterministic copy, no transformation)
+- **Prompt metadata**: YAML frontmatter (author, description) — optional, informational only
+- **Platform-specific mapping**: directory-based routing (source category dir → platform output dir), no artifact_type needed
 - **`.cursor/` and `.claude/` gitignored?**: Recommended to gitignore but user's choice
-- **Frontmatter required?**: artifact_type is optional — prompts without it default to `skill`
+- **Frontmatter required?**: No — frontmatter is optional metadata (description, author)
 - **Frontmatter in build output?**: Stripped for platforms that don't need it; each builder decides
 - **Error handling**: Fail fast with clear messages, no retries for MVP
 - **Local prompt source in lock file**: source = `local/<filename>`

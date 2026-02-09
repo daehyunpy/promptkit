@@ -1,33 +1,9 @@
-"""Tests for PromptSpec value object and ArtifactType enum."""
+"""Tests for PromptSpec value object."""
 
 import pytest
 
 from promptkit.domain.platform_target import PlatformTarget
-from promptkit.domain.prompt_spec import ArtifactType, PromptSpec
-
-
-class TestArtifactType:
-    def test_skill_value(self) -> None:
-        assert ArtifactType.SKILL.value == "skill"
-
-    def test_rule_value(self) -> None:
-        assert ArtifactType.RULE.value == "rule"
-
-    def test_agent_value(self) -> None:
-        assert ArtifactType.AGENT.value == "agent"
-
-    def test_command_value(self) -> None:
-        assert ArtifactType.COMMAND.value == "command"
-
-    def test_subagent_value(self) -> None:
-        assert ArtifactType.SUBAGENT.value == "subagent"
-
-    def test_from_string(self) -> None:
-        assert ArtifactType.from_string("skill") == ArtifactType.SKILL
-
-    def test_from_string_invalid_raises(self) -> None:
-        with pytest.raises(ValueError, match="invalid"):
-            ArtifactType.from_string("invalid")
+from promptkit.domain.prompt_spec import PromptSpec
 
 
 class TestPromptSpec:

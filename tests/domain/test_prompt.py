@@ -5,7 +5,7 @@ import hashlib
 from promptkit.domain.platform_target import PlatformTarget
 from promptkit.domain.prompt import Prompt
 from promptkit.domain.prompt_metadata import PromptMetadata
-from promptkit.domain.prompt_spec import ArtifactType, PromptSpec
+from promptkit.domain.prompt_spec import PromptSpec
 
 
 class TestPromptCreation:
@@ -15,22 +15,12 @@ class TestPromptCreation:
         assert prompt.spec is spec
         assert prompt.content == "You are a code reviewer."
         assert prompt.metadata is None
-        assert prompt.artifact_type is None
 
     def test_create_with_metadata(self) -> None:
         spec = PromptSpec(source="claude-plugins-official/code-review")
         metadata = PromptMetadata(author="Anthropic", version="1.0.0")
         prompt = Prompt(spec=spec, content="content", metadata=metadata)
         assert prompt.metadata == metadata
-
-    def test_create_with_artifact_type(self) -> None:
-        spec = PromptSpec(source="claude-plugins-official/code-review")
-        prompt = Prompt(
-            spec=spec,
-            content="content",
-            artifact_type=ArtifactType.SKILL,
-        )
-        assert prompt.artifact_type == ArtifactType.SKILL
 
     def test_name_delegates_to_spec(self) -> None:
         spec = PromptSpec(source="claude-plugins-official/code-review")
@@ -85,15 +75,3 @@ class TestPromptPlatformTargeting:
         prompt = Prompt(spec=spec, content="content")
         assert prompt.is_valid_for_platform(PlatformTarget.CURSOR) is True
         assert prompt.is_valid_for_platform(PlatformTarget.CLAUDE_CODE) is True
-
-
-class TestPromptArtifactType:
-    def test_artifact_type_none_by_default(self) -> None:
-        spec = PromptSpec(source="claude-plugins-official/test")
-        prompt = Prompt(spec=spec, content="content")
-        assert prompt.artifact_type is None
-
-    def test_artifact_type_set_explicitly(self) -> None:
-        spec = PromptSpec(source="claude-plugins-official/test")
-        prompt = Prompt(spec=spec, content="content", artifact_type=ArtifactType.AGENT)
-        assert prompt.artifact_type == ArtifactType.AGENT
