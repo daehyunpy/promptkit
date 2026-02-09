@@ -17,7 +17,7 @@ Created files and directories:
   - promptkit.yaml (project configuration)
   - promptkit.lock (dependency lock file)
   - .promptkit/cache/ (cached prompts)
-  - .agents/ (canonical prompts)
+  - prompts/ (local prompts)
   - .cursor/ (Cursor artifacts)
   - .claude/ (Claude Code artifacts)
   - .gitignore (updated with cache exclusions)

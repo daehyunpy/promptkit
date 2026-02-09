@@ -7,13 +7,14 @@ from promptkit.domain.project_config import (
 
 
 def test_default_config_has_required_fields() -> None:
-    """Default config should have version, prompts, and platforms."""
+    """Default config should have version, registries, prompts, and platforms."""
     config = ProjectConfig.default()
 
     assert config.version == DEFAULT_VERSION
     assert config.prompts == []
     assert "cursor" in config.platforms
     assert "claude-code" in config.platforms
+    assert len(config.registries) > 0
 
 
 def test_default_config_has_platform_output_dirs() -> None:
@@ -22,6 +23,14 @@ def test_default_config_has_platform_output_dirs() -> None:
 
     assert config.platforms["cursor"]["output_dir"] == ".cursor"
     assert config.platforms["claude-code"]["output_dir"] == ".claude"
+
+
+def test_default_config_has_mvp_registries() -> None:
+    """Default config should include the MVP registries."""
+    config = ProjectConfig.default()
+
+    assert "anthropic-agent-skills" in config.registries
+    assert "claude-plugins-official" in config.registries
 
 
 def test_to_dict_contains_all_fields() -> None:
@@ -33,6 +42,7 @@ def test_to_dict_contains_all_fields() -> None:
     assert result["prompts"] == []
     assert "cursor" in result["platforms"]
     assert "claude-code" in result["platforms"]
+    assert "registries" in result
 
 
 def test_to_dict_returns_plain_dict() -> None:
@@ -41,4 +51,4 @@ def test_to_dict_returns_plain_dict() -> None:
     result = config.to_dict()
 
     assert isinstance(result, dict)
-    assert set(result.keys()) == {"version", "prompts", "platforms"}
+    assert set(result.keys()) == {"version", "registries", "prompts", "platforms"}

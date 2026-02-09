@@ -1,0 +1,21 @@
+"""Domain layer: LockEntry value object for promptkit.lock entries."""
+
+from dataclasses import dataclass
+from datetime import datetime
+
+
+@dataclass(frozen=True)
+class LockEntry:
+    """Immutable lock entry recording the exact state of a synced prompt.
+
+    Stored in promptkit.lock to ensure reproducible builds.
+    """
+
+    name: str
+    source: str
+    content_hash: str
+    fetched_at: datetime
+
+    def has_content_changed(self, new_hash: str, /) -> bool:
+        """Whether the content has changed compared to a new hash."""
+        return self.content_hash != new_hash
