@@ -46,10 +46,10 @@ High-quality prompts exist in the Claude plugin marketplace and official documen
 
 ### Must Have (MVP)
 
-1. **Upstream Sync**
-   - `promptkit sync` fetches prompts from Claude plugin marketplace
+1. **Sync (Primary Command)**
+   - `promptkit sync` is the one-stop command: fetches prompts, updates lock file, and generates artifacts
+   - Equivalent to `uv sync` — takes you from config to working state in one step
    - Stores prompts in `.promptkit/cache/` directory
-   - Shows git diff of changes after sync
    - Re-syncing updates existing prompts
 
 2. **Declarative Configuration**
@@ -58,15 +58,17 @@ High-quality prompts exist in the Claude plugin marketplace and official documen
    - Human-readable and version-controllable
 
 3. **Lock File for Reproducibility**
-   - `promptkit.lock` records exact versions/hashes of synced prompts
+   - `promptkit lock` fetches prompts and records exact hashes in `promptkit.lock`
    - Ensures consistent builds across machines and over time
-   - Tracks what was actually fetched during sync
+   - Useful for CI validation, code review, and offline builds
+   - Equivalent to `uv lock` — resolves without generating artifacts
 
 4. **Multi-Platform Build**
-   - `promptkit build` generates platform-specific artifacts from synced prompts
+   - `promptkit build` generates platform-specific artifacts from cached prompts (no network needed)
    - **Cursor**: Generates `.cursor/` artifacts (agents, skills-cursor, rules, commands)
    - **Claude Code**: Generates `.claude/` artifacts (skills, rules, subagents, commands)
-   - Deterministic builds - same input always produces identical output
+   - Deterministic builds — same input always produces identical output (no AI transformation)
+   - Useful after `lock`, after reverting a lockfile via git, or for rebuilding after config changes
 
 5. **Multi-Prompt Support**
    - Single project can use multiple prompts (e.g., code reviewer + test writer + documentation generator)
@@ -110,7 +112,7 @@ High-quality prompts exist in the Claude plugin marketplace and official documen
 
 ### 1. Import Official Claude Prompt
 
-A developer discovers a high-quality prompt in the Claude plugin marketplace. They run `promptkit sync <source>`, add it to `promptkit.yaml`, run `promptkit build`, and the prompt now works in both Cursor and Claude Code without manual conversion.
+A developer discovers a high-quality prompt in the Claude plugin marketplace. They add it to `promptkit.yaml`, run `promptkit sync`, and the prompt is fetched, locked, and built into both Cursor and Claude Code artifacts automatically.
 
 ### 2. Share Prompts Across Personal Projects
 
@@ -118,7 +120,7 @@ A developer has 5 projects that all need the same code review prompt. Using prom
 
 ### 3. Team Standardization
 
-A team lead adds `promptkit.yaml` to the company repository specifying approved prompts. All developers run `promptkit sync && promptkit build`, and everyone gets an identical prompt setup. No more "it works on my machine" due to different prompt configurations.
+A team lead adds `promptkit.yaml` to the company repository specifying approved prompts. All developers run `promptkit sync`, and everyone gets an identical prompt setup. No more "it works on my machine" due to different prompt configurations.
 
 ### 4. Update Upstream Prompts
 
@@ -126,11 +128,11 @@ An official prompt receives a bug fix or improvement. The developer runs `prompt
 
 ### 5. Switch from Cursor to Claude Code
 
-A developer moves from Cursor to Claude Code. They update the target platforms in `promptkit.yaml`, run `promptkit build`, and their entire prompt library now works in the new tool—no manual migration needed.
+A developer moves from Cursor to Claude Code. They update the target platforms in `promptkit.yaml`, run `promptkit build` (no re-fetch needed), and their entire prompt library now works in the new tool—no manual migration needed.
 
 ### 6. Start New Project with Best Practices
 
-A developer starts a new project and runs `promptkit init` to scaffold the structure. They copy proven prompts from previous projects into `promptkit.yaml`, sync and build, and immediately have a professional prompt setup.
+A developer starts a new project and runs `promptkit init` to scaffold the structure. They copy proven prompts from previous projects into `promptkit.yaml`, run `promptkit sync`, and immediately have a professional prompt setup.
 
 ### 7. Multi-Prompt Composition
 

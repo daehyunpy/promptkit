@@ -7,13 +7,13 @@ promptkit is a Python-based CLI tool with a three-layer architecture:
 ```
 ┌─────────────────────────────────────────────────────┐
 │                 CLI Commands                        │
-│  (init, sync, build, validate)                      │
+│  (init, sync, lock, build, validate)                │
 └────────────────┬────────────────────────────────────┘
                  │
                  ▼
 ┌─────────────────────────────────────────────────────┐
 │              Application Layer                       │
-│  (Use cases: SyncPrompts, BuildArtifacts, etc.)     │
+│  (Use cases: LockPrompts, BuildArtifacts, etc.)     │
 └────────────────┬────────────────────────────────────┘
                  │
                  ▼
@@ -49,13 +49,38 @@ promptkit.lock          # Locks exact versions/hashes for reproducibility
 .claude/                # Generated Claude Code artifacts (skills, rules, subagents, commands)
 ```
 
+### Command Model
+
+promptkit follows the same pattern as modern package managers (uv, npm, cargo):
+
+```
+Manifest (promptkit.yaml)  →  Lockfile (promptkit.lock)  →  Artifacts (.cursor/, .claude/)
+         human intent              resolved exact state           installed environment
+```
+
+| Command | Internal steps | Needs network | uv equivalent |
+|---------|---------------|---------------|---------------|
+| `promptkit init` | Scaffold project | No | `uv init` |
+| `promptkit sync` | Fetch → lock → build | Yes | `uv sync` |
+| `promptkit lock` | Fetch → update lockfile | Yes | `uv lock` |
+| `promptkit build` | Cache → generate artifacts | No | N/A (implicit in sync) |
+| `promptkit validate` | Check config well-formed | No | `uv lock --check` |
+
+- **`sync`** is the primary command. It does everything: fetches prompts from sources, updates the lock file with content hashes, and generates platform artifacts. Like `uv sync`, it's the one command that takes you from config to working state.
+- **`lock`** fetches and locks without generating artifacts. Useful for CI validation, code review (lock changes are a reviewable diff), and offline builds (lock on your machine with network, build later without).
+- **`build`** generates artifacts from the existing lockfile and cache. No network needed. Useful after `lock`, after reverting a lockfile via git, or for rebuilding after changing platform config.
+
 ### Workflow
 
-1. **Sync** - `promptkit sync` fetches upstream prompts from sources (Claude plugin marketplace) and stores them in `.promptkit/cache/`. Updates `promptkit.lock` with versions/hashes.
+1. **Init** - `promptkit init` scaffolds a new project with config, directories, and gitignore.
 
-2. **Define** - Users write canonical/custom prompts in `.agents/` (committed to version control).
+2. **Configure** - User edits `promptkit.yaml` to declare which prompts to use and which platforms to target.
 
-3. **Build** - `promptkit build` reads from both `.promptkit/cache/` (upstream) and `.agents/` (canonical), merges them according to `promptkit.yaml`, and generates platform-specific outputs in `.cursor/` and `.claude/`.
+3. **Sync** - `promptkit sync` fetches prompts from sources, caches them in `.promptkit/cache/`, updates `promptkit.lock` with content hashes, and generates platform-specific artifacts in `.cursor/` and `.claude/`.
+
+4. **Define** - Users write canonical/custom prompts in `.agents/` (committed to version control).
+
+5. **Rebuild** - After config changes or git operations, `promptkit build` regenerates artifacts from cache without re-fetching.
 
 ### What Gets Committed to Git
 
@@ -82,6 +107,7 @@ promptkit/
 │       │   ├── __init__.py
 │       │   ├── prompt.py             # Prompt aggregate root
 │       │   ├── prompt_spec.py        # PromptSpec value object
+│       │   ├── prompt_metadata.py    # PromptMetadata value object
 │       │   ├── lock_entry.py         # LockEntry value object
 │       │   ├── platform_target.py    # PlatformTarget enum
 │       │   ├── errors.py             # Domain errors
@@ -90,8 +116,8 @@ promptkit/
 │       ├── app/                      # Application layer (use cases)
 │       │   ├── __init__.py
 │       │   ├── init.py               # Init use case
-│       │   ├── sync.py               # Sync use case
-│       │   ├── build.py              # Build use case
+│       │   ├── lock.py               # Lock use case (fetch + lock)
+│       │   ├── build.py              # Build use case (cache → artifacts)
 │       │   └── validate.py           # Validate use case
 │       │
 │       └── infra/                    # Infrastructure layer (adapters)
@@ -112,9 +138,10 @@ promptkit/
 │   ├── conftest.py
 │   ├── domain/
 │   │   ├── test_prompt.py
-│   │   └── test_prompt_spec.py
+│   │   ├── test_prompt_spec.py
+│   │   └── ...
 │   ├── app/
-│   │   ├── test_sync.py
+│   │   ├── test_lock.py
 │   │   └── test_build.py
 │   └── infra/
 │       ├── test_yaml_loader.py
@@ -140,10 +167,11 @@ Pure business logic. No dependencies on infrastructure.
 - `Prompt` - Aggregate root. Has identity, tracks state (synced, built, etc.)
 
 **Value Objects:**
-- `PromptSpec` - Immutable prompt specification (source, name, platforms)
-- `LockEntry` - Immutable lock entry (version, hash, timestamp)
+- `PromptSpec` - Immutable prompt specification (source, name, platforms, artifact_type)
+- `LockEntry` - Immutable lock entry (hash, timestamp)
 - `PromptMetadata` - Immutable metadata (author, description, version)
 - `PlatformTarget` - Enum (CURSOR, CLAUDE_CODE)
+- `ArtifactType` - Enum (SKILL, RULE, AGENT, COMMAND, SUBAGENT)
 
 **Protocols:**
 - `PromptFetcher` - Protocol for fetching prompts from sources
@@ -161,9 +189,11 @@ Use cases that orchestrate domain objects and infrastructure.
 
 **Use Cases:**
 - `InitProject` - Scaffold new project structure
-- `SyncPrompts` - Fetch prompts and update lock file
-- `BuildArtifacts` - Generate platform-specific outputs
+- `LockPrompts` - Fetch prompts and update lock file (used by both `lock` and `sync` commands)
+- `BuildArtifacts` - Generate platform-specific outputs from cache (used by both `build` and `sync` commands)
 - `ValidateConfig` - Validate promptkit.yaml
+
+**`sync` = `LockPrompts` + `BuildArtifacts`** — the CLI `sync` command composes the two use cases sequentially.
 
 ### Infrastructure Layer (`source/promptkit/infra/`)
 
@@ -205,12 +235,17 @@ def init():
 
 @app.command()
 def sync():
-    """Sync prompts from upstream sources"""
+    """Fetch prompts, update lock file, and generate artifacts"""
+    pass
+
+@app.command()
+def lock():
+    """Fetch prompts and update lock file without generating artifacts"""
     pass
 
 @app.command()
 def build():
-    """Build platform-specific artifacts"""
+    """Generate platform-specific artifacts from cached prompts"""
     pass
 
 @app.command()
@@ -261,54 +296,84 @@ version: 1
 ```yaml
 # Lock file format
 version: 1
-generated_at: 2026-02-08T14:50:00Z
 
 prompts:
   - name: code-reviewer
     source: anthropic/code-reviewer
-    version: latest  # For MVP (no version pinning yet)
     hash: sha256:abc123...
-    fetched_at: 2026-02-08T14:50:00Z
+    fetched_at: '2026-02-08T14:50:00+00:00'
 
   - name: test-writer
     source: local/test-writer
-    version: null  # Local prompts have no version
     hash: sha256:def456...
-    fetched_at: 2026-02-08T14:50:00Z
+    fetched_at: '2026-02-08T14:50:00+00:00'
 ```
 
 ## Build System
 
 ### Build Process
 
-1. **Load Config** - Parse `promptkit.yaml` and `promptkit.lock`
-2. **Read Prompts** - Load prompts from `.promptkit/cache/` and `.agents/`
-3. **Validate** - Check that all referenced prompts exist
-4. **Transform** - Convert prompts to platform-specific formats
+Build is a deterministic, offline operation. It reads cached prompts and generates platform artifacts:
+
+1. **Load Config** - Parse `promptkit.yaml` for prompt specs and platform output dirs
+2. **Load Lock** - Parse `promptkit.lock` for content hashes (verification)
+3. **Read Prompts** - Load prompt content from `.promptkit/cache/` and `.agents/`
+4. **Route** - Map each prompt to the correct output directory based on `artifact_type` and `platform`
 5. **Generate** - Write artifacts to `.cursor/` and `.claude/`
 
-### Platform Adapters
+Build does **not** transform prompt content. It copies content to the correct platform directory. This keeps builds deterministic — same inputs always produce identical outputs.
 
-Each platform has a builder that implements `ArtifactBuilder`:
+### Platform Artifact Mapping
 
-**CursorBuilder:**
-- Generates `.cursor/agents/`
-- Generates `.cursor/skills-cursor/`
-- Generates `.cursor/rules/`
-- Generates `.cursor/commands/`
+Each `artifact_type` maps to a specific subdirectory per platform:
 
-**ClaudeBuilder:**
-- Generates `.claude/skills/`
-- Generates `.claude/rules/`
-- Generates `.claude/subagents/`
-- Generates `.claude/commands/`
+| ArtifactType | Cursor output | Claude Code output |
+|---|---|---|
+| `skill` | `.cursor/skills-cursor/<name>.md` | `.claude/skills/<name>.md` |
+| `rule` | `.cursor/rules/<name>.md` | `.claude/rules/<name>.md` |
+| `agent` | `.cursor/agents/<name>.md` | `.claude/agents/<name>.md` |
+| `command` | `.cursor/commands/<name>.md` | `.claude/commands/<name>.md` |
+| `subagent` | `.cursor/subagents/<name>.md` | `.claude/subagents/<name>.md` |
 
 ### Determinism
 
 - Sort all outputs alphabetically
 - Use stable hashing (SHA256)
 - No timestamps in generated files
+- No AI transformation in the build pipeline — deterministic copy + route only
 - Consistent formatting (YAML, Markdown)
+
+### Future: AI-Assisted Transformation
+
+Post-MVP, we may need AI to adapt prompts between platform formats (e.g., converting a Cursor-specific prompt to Claude Code conventions). If added, the approach would be:
+
+- Transform once during `lock`, not during `build`
+- Cache the transformed output alongside the original
+- `build` always uses cached transforms — never calls an LLM
+- Lock file records both original and transformed hashes
+
+This preserves deterministic builds while allowing intelligent adaptation. Not needed for MVP where build is a simple copy + route operation.
+
+## Lock Process
+
+### Lock Algorithm
+
+1. Parse `promptkit.yaml` to get list of prompt specs
+2. Load existing `promptkit.lock` (if any) for comparison
+3. For each prompt spec:
+   - Fetch content from source (marketplace, local file, etc.)
+   - Compute SHA256 hash of content
+   - Compare with existing lock entry
+   - If changed or new: update cache in `.promptkit/cache/` and create new lock entry
+   - If unchanged: keep existing lock entry (preserves `fetched_at`)
+4. Write updated `promptkit.lock`
+
+### Lock Benefits
+
+- **CI validation** — `promptkit validate` can check if lockfile is stale (config changed without re-locking)
+- **Reproducibility** — lock captures exact content hashes; `build` uses cached content from lock
+- **Code review** — lock changes show up as a reviewable diff separate from artifact changes
+- **Offline builds** — `lock` once with network, then `build` anywhere without network
 
 ## Upstream Sync
 
@@ -323,17 +388,6 @@ Options:
 4. **Manual Registry** - Curated list of known prompts
 
 For MVP, we can start with a **manual registry** (hardcoded URLs or a local registry file).
-
-### Sync Algorithm
-
-1. Parse `promptkit.yaml` to get list of prompts
-2. For each prompt:
-   - Fetch from source (marketplace or local)
-   - Compute hash (SHA256)
-   - Compare with `promptkit.lock`
-   - If different, update cache and lock file
-3. Write updated `promptkit.lock`
-4. Show git diff to user
 
 ## Testing Strategy
 
@@ -357,46 +411,54 @@ For MVP, we can start with a **manual registry** (hardcoded URLs or a local regi
 
 ## Build Order
 
-### Phase 1: Project Scaffold
+### Phase 1: Project Scaffold ✅
 - Set up Python package structure
 - Configure pyproject.toml, uv
 - Add basic CLI skeleton
 
-### Phase 2: Init Command
+### Phase 2: Init Command ✅
 - Implement `promptkit init`
 - Create directory structure
 - Generate template `promptkit.yaml`
 
-### Phase 3: Domain Model
-- Define `Prompt`, `PromptSpec`, `LockEntry`
+### Phase 3: Domain Model ✅
+- Define `Prompt`, `PromptSpec`, `LockEntry`, `PromptMetadata`
+- Define `PlatformTarget`, `ArtifactType` enums
 - Define protocols (`PromptFetcher`, `ArtifactBuilder`)
 - Define domain errors
 
-### Phase 4: Config Loading
+### Phase 4: Config Loading ✅
 - Implement YAML loader for `promptkit.yaml`
 - Implement lock file reader/writer
 - Add validation logic
 
-### Phase 5: Sync Command (Local)
+### Phase 5: Lock Command
 - Implement `LocalFileFetcher` for `.agents/`
-- Implement sync use case
-- Update lock file with hashes
+- Implement `PromptCache` for `.promptkit/cache/`
+- Implement `LockPrompts` use case
+- Add `lock` CLI command
 
 ### Phase 6: Build Command
 - Implement `CursorBuilder`
 - Implement `ClaudeBuilder`
-- Generate artifacts from prompts
+- Implement `BuildArtifacts` use case
+- Add `build` CLI command
 
-### Phase 7: Validate Command
+### Phase 7: Sync Command
+- Compose `LockPrompts` + `BuildArtifacts` into `sync` CLI command
+- This is the primary user-facing command
+
+### Phase 8: Validate Command
 - Implement validation use case
 - Check config well-formed
 - Verify prompts exist
+- Check lockfile freshness
 
-### Phase 8: Upstream Sync (Claude Marketplace)
+### Phase 9: Upstream Sync (Claude Marketplace)
 - Implement `ClaudeMarketplaceFetcher`
-- Add to sync command
+- Add to lock/sync commands
 
-### Phase 9: Polish
+### Phase 10: Polish
 - Error messages
 - CLI help text
 - Progress indicators
@@ -426,10 +488,10 @@ For MVP, we can start with a **manual registry** (hardcoded URLs or a local regi
    You are an expert code reviewer...
    ```
 
-3. **Platform Mapping** - Direct copy (simple approach)
+3. **Platform Mapping** - Deterministic copy + route (no transformation)
    - Each prompt specifies which platform artifact type (skill, rule, agent, etc.)
-   - Copy markdown content directly to appropriate directory
-   - Platform-specific formatting added later if needed
+   - Copy markdown content directly to appropriate directory based on artifact_type
+   - No AI transformation in the build pipeline for MVP
 
 4. **Hash Algorithm** - SHA256 of content only (excluding timestamps)
    - Standard, secure, widely supported
@@ -444,6 +506,12 @@ For MVP, we can start with a **manual registry** (hardcoded URLs or a local regi
    - Promptkit doesn't execute git commands
    - User runs `git diff` themselves to see changes
    - Keeps tool simple, no git dependency
+
+7. **Command Model** - Follow package manager conventions (uv, npm, cargo)
+   - `sync` = fetch + lock + build (the one-stop command)
+   - `lock` = fetch + update lockfile (resolve without installing)
+   - `build` = generate artifacts from cache (install from lockfile)
+   - Steps are cleanly separated internally; each is independently useful
 
 ### Open Questions
 

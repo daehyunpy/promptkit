@@ -15,12 +15,18 @@ Read both before making changes.
 
 ## Current State
 
-**Pre-implementation.** No code written yet. Currently in planning phase.
+**Phases 1-4 complete.** Domain model and config loading implemented. 111 tests passing.
+
+**Completed:**
+- Phase 1-2: Project scaffold + `promptkit init` command
+- Phase 3: Domain model (Prompt, PromptSpec, LockEntry, PlatformTarget, ArtifactType, errors, protocols)
+- Phase 4: Config loading (YamlLoader, LockFile reader/writer)
 
 **Next Steps:**
-- Review `docs/product_requirements.md` and `docs/technical_design.md`
-- Use `/opsx:new <change-name>` to start new features
-- Follow TDD: write failing test → implement → refactor
+- Phase 5: Lock command (LocalFileFetcher, PromptCache, LockPrompts use case)
+- Phase 6: Build command (CursorBuilder, ClaudeBuilder, BuildArtifacts use case)
+- Phase 7: Sync command (compose lock + build)
+- Phase 8: Validate command
 
 ## Tech Stack
 
@@ -73,10 +79,24 @@ promptkit/
 │   └── promptkit/
 │       ├── __init__.py
 │       ├── cli.py                  # CLI entry point
-│       ├── sync.py                 # Sync command
-│       ├── build.py                # Build command
-│       ├── validate.py             # Validate command
-│       └── init.py                 # Init command
+│       ├── domain/                 # Domain layer (pure business logic)
+│       │   ├── prompt.py           # Prompt aggregate root
+│       │   ├── prompt_spec.py      # PromptSpec value object + ArtifactType enum
+│       │   ├── prompt_metadata.py  # PromptMetadata value object
+│       │   ├── lock_entry.py       # LockEntry value object
+│       │   ├── platform_target.py  # PlatformTarget enum
+│       │   ├── errors.py           # Domain errors
+│       │   └── protocols.py        # PromptFetcher, ArtifactBuilder protocols
+│       ├── app/                    # Application layer (use cases)
+│       │   ├── init.py             # Init use case
+│       │   ├── lock.py             # Lock use case (fetch + lock)
+│       │   ├── build.py            # Build use case (cache → artifacts)
+│       │   └── validate.py         # Validate use case
+│       └── infra/                  # Infrastructure layer (adapters)
+│           ├── config/             # Config loading
+│           ├── fetchers/           # Prompt fetchers
+│           ├── builders/           # Platform artifact builders
+│           └── storage/            # Cache management
 ├── tests/                          # Tests mirror source/ structure
 ├── pyproject.toml                  # Python project config
 ├── uv.lock                         # Locked dependencies
@@ -90,18 +110,21 @@ promptkit/
 
 ## MVP Commands
 
-| Command | What it does |
-|---------|--------------|
-| `promptkit init` | Scaffold new project structure |
-| `promptkit sync` | Fetch prompts from upstream sources → `.promptkit/cache/`, update lock file |
-| `promptkit build` | Generate `.cursor/` and `.claude/` artifacts from cache + `.agents/` |
-| `promptkit validate` | Verify `promptkit.yaml` is well-formed and prompts exist |
+| Command | What it does | Needs network |
+|---------|--------------|---------------|
+| `promptkit init` | Scaffold new project structure | No |
+| `promptkit sync` | Fetch + lock + build (the one-stop command) | Yes |
+| `promptkit lock` | Fetch + update lockfile only | Yes |
+| `promptkit build` | Generate artifacts from cached prompts | No |
+| `promptkit validate` | Verify config is well-formed and prompts exist | No |
 
 ## Core Workflow
 
-1. **Sync** - Fetch upstream prompts and cache them
-2. **Define** - Write canonical prompts in `.agents/`
-3. **Build** - Generate platform-specific artifacts in `.cursor/` and `.claude/`
+1. **Init** - `promptkit init` scaffolds project with config and directories
+2. **Configure** - Edit `promptkit.yaml` to declare prompts and platforms
+3. **Sync** - `promptkit sync` fetches, locks, and builds everything
+4. **Define** - Write canonical prompts in `.agents/`
+5. **Rebuild** - `promptkit build` regenerates artifacts without re-fetching
 
 ## Coding Disciplines
 
