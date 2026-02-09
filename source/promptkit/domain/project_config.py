@@ -1,8 +1,14 @@
 """Domain layer: ProjectConfig value object for promptkit.yaml structure."""
 
 from dataclasses import dataclass, field
+from typing import Any
 
-import yaml
+DEFAULT_VERSION = 1
+
+DEFAULT_PLATFORMS: dict[str, dict[str, str]] = {
+    "cursor": {"output_dir": ".cursor"},
+    "claude-code": {"output_dir": ".claude"},
+}
 
 
 @dataclass(frozen=True)
@@ -10,42 +16,22 @@ class ProjectConfig:
     """Configuration for a promptkit project (promptkit.yaml structure)."""
 
     version: int
-    prompts: list[dict[str, any]] = field(default_factory=list)
+    prompts: list[dict[str, Any]] = field(default_factory=list)
     platforms: dict[str, dict[str, str]] = field(default_factory=dict)
 
     @classmethod
     def default(cls, /) -> "ProjectConfig":
         """Return default configuration with example prompt structure."""
         return cls(
-            version=1,
+            version=DEFAULT_VERSION,
             prompts=[],
-            platforms={
-                "cursor": {"output_dir": ".cursor"},
-                "claude-code": {"output_dir": ".claude"},
-            },
+            platforms=dict(DEFAULT_PLATFORMS),
         )
 
-    def to_yaml_string(self, /) -> str:
-        """Serialize configuration to YAML string."""
-        # Build config dict
-        config_dict = {
+    def to_dict(self, /) -> dict[str, Any]:
+        """Return configuration as a plain dictionary."""
+        return {
             "version": self.version,
-            "prompts": self.prompts if self.prompts else [],
+            "prompts": self.prompts,
             "platforms": self.platforms,
         }
-
-        # Add commented example if prompts list is empty
-        yaml_output = yaml.dump(config_dict, sort_keys=False, default_flow_style=False)
-
-        if not self.prompts:
-            # Insert commented example after prompts: []
-            example = """  # Example prompt entry - uncomment and edit
-  # - name: code-reviewer
-  #   source: anthropic/code-reviewer
-  #   platforms:
-  #     - cursor
-  #     - claude-code
-"""
-            yaml_output = yaml_output.replace("prompts: []\n", f"prompts:\n{example}\n")
-
-        return yaml_output

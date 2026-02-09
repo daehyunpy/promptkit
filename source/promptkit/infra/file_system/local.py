@@ -1,12 +1,12 @@
-"""Local file system implementation."""
+"""Infrastructure layer: local file system implementation."""
 
 from pathlib import Path
 
 
 class FileSystem:
-    """Local file system implementation.
+    """File system backed by the local OS.
 
-    Implements the FileSystem protocol defined in domain layer.
+    Implements the FileSystem protocol defined in the domain layer.
     """
 
     def create_directory(self, path: Path, /) -> None:
