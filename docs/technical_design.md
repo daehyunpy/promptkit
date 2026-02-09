@@ -375,6 +375,27 @@ This preserves deterministic builds while allowing intelligent adaptation. Not n
 - **Code review** — lock changes show up as a reviewable diff separate from artifact changes
 - **Offline builds** — `lock` once with network, then `build` anywhere without network
 
+## Prompt Cache
+
+### Content-Addressable Storage
+
+The cache (`.promptkit/cache/`) uses content-addressable storage, similar to git objects. Files are named by their SHA256 content hash:
+
+```
+.promptkit/cache/
+  sha256-abc123def456.md
+  sha256-789xyz000111.md
+```
+
+The lockfile maps `name → hash`, the cache maps `hash → content`. This gives us:
+- **No naming conflicts** — two prompts with the same name but different content get different cache entries
+- **Deduplication** — identical content from different sources shares one cache file
+- **Integrity verification** — cache filename = content hash, trivially verifiable
+
+### Prompt Content
+
+The entire prompt file is treated as content — including any YAML frontmatter. No frontmatter parsing at fetch time. The whole file is hashed and cached as-is. `PromptMetadata` extraction may be added post-MVP for display/search features.
+
 ## Upstream Sync
 
 ### Claude Plugin Marketplace
@@ -387,7 +408,7 @@ Options:
 3. **Web Scraping** - Last resort, fragile
 4. **Manual Registry** - Curated list of known prompts
 
-For MVP, we can start with a **manual registry** (hardcoded URLs or a local registry file).
+For MVP, upstream sources (non-`local/`) return a clear error: "Upstream sources not yet supported. Use local/ sources." The `ClaudeMarketplaceFetcher` is part of the MVP roadmap but not the initial implementation.
 
 ## Testing Strategy
 
@@ -513,13 +534,28 @@ For MVP, we can start with a **manual registry** (hardcoded URLs or a local regi
    - `build` = generate artifacts from cache (install from lockfile)
    - Steps are cleanly separated internally; each is independently useful
 
+8. **Artifact type is required** - `artifact_type` must be specified in `promptkit.yaml` for every prompt
+   - All 5 types supported at MVP: skill, rule, agent, command, subagent
+   - No default — validation error if omitted
+   - Config is the source of truth for where a prompt lands
+
+9. **Content-addressable cache** - `.promptkit/cache/` uses SHA256 hash as filename (like git objects)
+   - Lockfile maps name → hash, cache maps hash → content
+   - No naming conflicts, trivial deduplication
+
+10. **Whole file is content** - No frontmatter parsing at fetch/lock time
+    - Entire file (including any YAML frontmatter) is hashed and cached as-is
+    - `PromptMetadata` extraction deferred to post-MVP
+
+11. **Upstream sources stubbed for MVP** - Non-local sources error with clear message
+    - `ClaudeMarketplaceFetcher` is on the roadmap but not initial implementation
+
 ### Open Questions
 
 Need to resolve during implementation:
 
 1. **GitHub Repository Structure** - What's the actual repo URL and structure for Claude prompts?
 2. **Error Handling** - How to handle network failures, missing files, malformed YAML?
-3. **Artifact Type Mapping** - How does prompt metadata specify if it's a skill vs rule vs agent?
 
 ## Dependencies
 

@@ -82,15 +82,17 @@ def _parse_prompt_entry(entry: dict[str, Any]) -> PromptSpec:
         raise ValidationError("Prompt entry missing required field: 'name'")
     if "source" not in entry:
         raise ValidationError("Prompt entry missing required field: 'source'")
+    if "artifact_type" not in entry:
+        raise ValidationError("Prompt entry missing required field: 'artifact_type'")
 
     platforms = _parse_platforms(entry.get("platforms", []))
-    artifact_type = _parse_artifact_type(entry.get("artifact_type"))
+    artifact_type = _parse_artifact_type(entry["artifact_type"])
 
     return PromptSpec(
         name=entry["name"],
         source=entry["source"],
-        platforms=tuple(platforms),
         artifact_type=artifact_type,
+        platforms=tuple(platforms),
     )
 
 
@@ -106,9 +108,7 @@ def _parse_platforms(platforms_raw: list[str] | None) -> list[PlatformTarget]:
     return platforms
 
 
-def _parse_artifact_type(value: str | None) -> ArtifactType | None:
-    if value is None:
-        return None
+def _parse_artifact_type(value: str) -> ArtifactType:
     try:
         return ArtifactType.from_string(value)
     except ValueError as e:

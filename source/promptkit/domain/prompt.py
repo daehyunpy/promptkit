@@ -32,7 +32,7 @@ class Prompt:
         return self.spec.source
 
     @property
-    def artifact_type(self) -> ArtifactType | None:
+    def artifact_type(self) -> ArtifactType:
         return self.spec.artifact_type
 
     @property

@@ -25,6 +25,7 @@ version: 1
 prompts:
   - name: code-reviewer
     source: anthropic/code-reviewer
+    artifact_type: skill
     platforms:
       - cursor
       - claude-code
@@ -34,6 +35,7 @@ prompts:
         spec = config.prompt_specs[0]
         assert spec.name == "code-reviewer"
         assert spec.source == "anthropic/code-reviewer"
+        assert spec.artifact_type == ArtifactType.SKILL
         assert PlatformTarget.CURSOR in spec.platforms
         assert PlatformTarget.CLAUDE_CODE in spec.platforms
 
@@ -43,30 +45,49 @@ version: 1
 prompts:
   - name: code-reviewer
     source: anthropic/code-reviewer
+    artifact_type: rule
     platforms:
       - cursor
   - name: test-writer
     source: local/test-writer
+    artifact_type: agent
     platforms:
       - claude-code
 """
         config = YamlLoader.load(yaml_content)
         assert len(config.prompt_specs) == 2
         assert config.prompt_specs[0].name == "code-reviewer"
+        assert config.prompt_specs[0].artifact_type == ArtifactType.RULE
         assert config.prompt_specs[1].name == "test-writer"
+        assert config.prompt_specs[1].artifact_type == ArtifactType.AGENT
 
-    def test_loads_prompt_with_artifact_type(self) -> None:
+    def test_loads_all_artifact_types(self) -> None:
         yaml_content = """\
 version: 1
 prompts:
-  - name: code-reviewer
-    source: anthropic/code-reviewer
+  - name: p1
+    source: local/p1
     artifact_type: skill
-    platforms:
-      - cursor
+  - name: p2
+    source: local/p2
+    artifact_type: rule
+  - name: p3
+    source: local/p3
+    artifact_type: agent
+  - name: p4
+    source: local/p4
+    artifact_type: command
+  - name: p5
+    source: local/p5
+    artifact_type: subagent
 """
         config = YamlLoader.load(yaml_content)
+        assert len(config.prompt_specs) == 5
         assert config.prompt_specs[0].artifact_type == ArtifactType.SKILL
+        assert config.prompt_specs[1].artifact_type == ArtifactType.RULE
+        assert config.prompt_specs[2].artifact_type == ArtifactType.AGENT
+        assert config.prompt_specs[3].artifact_type == ArtifactType.COMMAND
+        assert config.prompt_specs[4].artifact_type == ArtifactType.SUBAGENT
 
     def test_loads_prompt_without_platforms(self) -> None:
         yaml_content = """\
@@ -74,6 +95,7 @@ version: 1
 prompts:
   - name: code-reviewer
     source: anthropic/code-reviewer
+    artifact_type: rule
 """
         config = YamlLoader.load(yaml_content)
         assert config.prompt_specs[0].platforms == ()
@@ -118,6 +140,7 @@ version: 1
 prompts:
   - name: test
     source: local/test
+    artifact_type: rule
     platforms:
       - invalid-platform
 """
@@ -129,6 +152,7 @@ prompts:
 version: 1
 prompts:
   - source: local/test
+    artifact_type: rule
 """
         with pytest.raises(ValidationError, match="name"):
             YamlLoader.load(yaml_content)
@@ -138,8 +162,30 @@ prompts:
 version: 1
 prompts:
   - name: test
+    artifact_type: rule
 """
         with pytest.raises(ValidationError, match="source"):
+            YamlLoader.load(yaml_content)
+
+    def test_raises_on_prompt_missing_artifact_type(self) -> None:
+        yaml_content = """\
+version: 1
+prompts:
+  - name: test
+    source: local/test
+"""
+        with pytest.raises(ValidationError, match="artifact_type"):
+            YamlLoader.load(yaml_content)
+
+    def test_raises_on_invalid_artifact_type(self) -> None:
+        yaml_content = """\
+version: 1
+prompts:
+  - name: test
+    source: local/test
+    artifact_type: invalid
+"""
+        with pytest.raises(ValidationError, match="Unknown artifact type"):
             YamlLoader.load(yaml_content)
 
     def test_raises_on_non_dict_yaml(self) -> None:

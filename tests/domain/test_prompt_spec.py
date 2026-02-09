@@ -36,18 +36,19 @@ class TestPromptSpec:
         spec = PromptSpec(
             name="code-reviewer",
             source="anthropic/code-reviewer",
+            artifact_type=ArtifactType.RULE,
         )
         assert spec.name == "code-reviewer"
         assert spec.source == "anthropic/code-reviewer"
+        assert spec.artifact_type == ArtifactType.RULE
         assert spec.platforms == ()
-        assert spec.artifact_type is None
 
     def test_create_with_all_fields(self) -> None:
         spec = PromptSpec(
             name="code-reviewer",
             source="anthropic/code-reviewer",
-            platforms=(PlatformTarget.CURSOR, PlatformTarget.CLAUDE_CODE),
             artifact_type=ArtifactType.SKILL,
+            platforms=(PlatformTarget.CURSOR, PlatformTarget.CLAUDE_CODE),
         )
         assert spec.name == "code-reviewer"
         assert spec.source == "anthropic/code-reviewer"
@@ -55,7 +56,9 @@ class TestPromptSpec:
         assert spec.artifact_type == ArtifactType.SKILL
 
     def test_is_immutable(self) -> None:
-        spec = PromptSpec(name="test", source="local/test")
+        spec = PromptSpec(
+            name="test", source="local/test", artifact_type=ArtifactType.RULE
+        )
         try:
             spec.name = "other"  # type: ignore[misc]
             assert False, "Expected FrozenInstanceError"
@@ -63,17 +66,24 @@ class TestPromptSpec:
             pass
 
     def test_is_local_source(self) -> None:
-        spec = PromptSpec(name="test", source="local/test")
+        spec = PromptSpec(
+            name="test", source="local/test", artifact_type=ArtifactType.RULE
+        )
         assert spec.is_local_source is True
 
     def test_is_not_local_source(self) -> None:
-        spec = PromptSpec(name="test", source="anthropic/code-reviewer")
+        spec = PromptSpec(
+            name="test",
+            source="anthropic/code-reviewer",
+            artifact_type=ArtifactType.RULE,
+        )
         assert spec.is_local_source is False
 
     def test_targets_platform_when_included(self) -> None:
         spec = PromptSpec(
             name="test",
             source="local/test",
+            artifact_type=ArtifactType.RULE,
             platforms=(PlatformTarget.CURSOR,),
         )
         assert spec.targets_platform(PlatformTarget.CURSOR) is True
@@ -82,16 +92,26 @@ class TestPromptSpec:
         spec = PromptSpec(
             name="test",
             source="local/test",
+            artifact_type=ArtifactType.RULE,
             platforms=(PlatformTarget.CURSOR,),
         )
         assert spec.targets_platform(PlatformTarget.CLAUDE_CODE) is False
 
     def test_targets_all_platforms_when_empty(self) -> None:
-        spec = PromptSpec(name="test", source="local/test", platforms=())
+        spec = PromptSpec(
+            name="test",
+            source="local/test",
+            artifact_type=ArtifactType.RULE,
+            platforms=(),
+        )
         assert spec.targets_platform(PlatformTarget.CURSOR) is True
         assert spec.targets_platform(PlatformTarget.CLAUDE_CODE) is True
 
     def test_equality_same_values(self) -> None:
-        s1 = PromptSpec(name="test", source="local/test")
-        s2 = PromptSpec(name="test", source="local/test")
+        s1 = PromptSpec(
+            name="test", source="local/test", artifact_type=ArtifactType.RULE
+        )
+        s2 = PromptSpec(
+            name="test", source="local/test", artifact_type=ArtifactType.RULE
+        )
         assert s1 == s2

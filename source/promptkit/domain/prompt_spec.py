@@ -40,8 +40,8 @@ class PromptSpec:
 
     name: str
     source: str
+    artifact_type: ArtifactType
     platforms: tuple[PlatformTarget, ...] = field(default_factory=tuple)
-    artifact_type: ArtifactType | None = None
 
     @property
     def is_local_source(self) -> bool:
