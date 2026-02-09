@@ -227,13 +227,15 @@ This project uses OpenSpec for spec-driven development. All non-trivial changes 
 
 Artifacts are stored in `openspec/changes/` during development and moved to `openspec/changes/archive/` when done.
 
-## Open Questions
+## Resolved Questions
 
-These need to be resolved during implementation:
-
-- Which Python CLI framework? (typer recommended for modern type-safe CLI)
-- How to fetch from Claude plugin marketplace? (API? web scraping? manual registry?)
-- Lock file format? (JSON? YAML? custom format?)
-- How to handle prompt metadata (author, version, description)?
-- How to map generic prompts to platform-specific formats?
-- Should `.cursor/` and `.claude/` be gitignored by default?
+- **CLI framework**: typer (modern type-safe CLI)
+- **Fetch from Claude marketplace**: GitHub-hosted registries, stub fetcher for initial phases (needs research)
+- **Lock file format**: YAML (`promptkit.lock`)
+- **Prompt metadata**: YAML frontmatter (author, description, artifact_type)
+- **Platform-specific mapping**: artifact_type from frontmatter routes to platform subdirectories (deterministic copy, no transformation)
+- **`.cursor/` and `.claude/` gitignored?**: Recommended to gitignore but user's choice
+- **Frontmatter required?**: artifact_type is optional — prompts without it default to `skill`
+- **Frontmatter in build output?**: Stripped for platforms that don't need it; each builder decides
+- **Error handling**: Fail fast with clear messages, no retries for MVP
+- **Local prompt source in lock file**: source = `local/<filename>`

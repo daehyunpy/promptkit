@@ -235,10 +235,8 @@ You are an expert code reviewer. Review the following code for:
 Be constructive and specific in your feedback.
 ```
 
-**Required frontmatter fields:**
-- `artifact_type` - Where to place the prompt: `skill`, `rule`, `agent`, `command`, `subagent`
-
-**Optional frontmatter fields:**
+**Frontmatter fields (all optional):**
+- `artifact_type` - Where to place the prompt: `skill`, `rule`, `agent`, `command`, `subagent` (defaults to `skill`)
 - `description` - Brief description (for display)
 - `author` - Prompt author/maintainer
 
@@ -631,11 +629,16 @@ promptkit = "promptkit.cli:app"
 12. **Upstream sources stubbed for MVP** - `claude-marketplace` registry type returns clear error
     - `ClaudeMarketplaceFetcher` is on the roadmap but stubbed initially
 
-### Open Questions
+13. **Error Handling** - Fail fast with clear messages, no retries for MVP
+    - Network failures → `SyncError`
+    - Malformed YAML → `ValidationError`
+    - Missing files → `BuildError`
 
-Need to resolve during implementation:
+14. **Frontmatter is optional** - `artifact_type` defaults to `skill` if frontmatter is missing
 
-1. **Error Handling** - How to handle network failures, missing files, malformed YAML?
+15. **Frontmatter stripped in build output** - Each platform builder decides whether to strip frontmatter; platforms that don't understand it get clean content
+
+16. **Local prompts use `local/` source in lock file** - e.g., `source: local/my-custom-rule`
 
 ### Future: AI-Assisted Transformation
 
