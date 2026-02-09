@@ -4,121 +4,238 @@ import pytest
 
 from promptkit.domain.errors import ValidationError
 from promptkit.domain.platform_target import PlatformTarget
-from promptkit.domain.prompt_spec import ArtifactType
+from promptkit.domain.registry import RegistryType
 from promptkit.infra.config.yaml_loader import YamlLoader
 
 
-class TestYamlLoaderValidConfig:
+MINIMAL_CONFIG = """\
+version: 1
+prompts: []
+"""
+
+
+class TestYamlLoaderVersion:
     def test_loads_version(self) -> None:
-        yaml_content = "version: 1\nprompts: []\n"
-        config = YamlLoader.load(yaml_content)
+        config = YamlLoader.load(MINIMAL_CONFIG)
         assert config.version == 1
 
-    def test_loads_empty_prompts(self) -> None:
-        yaml_content = "version: 1\nprompts: []\n"
-        config = YamlLoader.load(yaml_content)
-        assert config.prompt_specs == []
 
-    def test_loads_single_prompt_spec(self) -> None:
+class TestYamlLoaderRegistries:
+    def test_loads_registry_object_form(self) -> None:
+        yaml_content = """\
+version: 1
+registries:
+  anthropic-agent-skills:
+    type: claude-marketplace
+    url: https://github.com/anthropics/skills
+prompts: []
+"""
+        config = YamlLoader.load(yaml_content)
+        assert len(config.registries) == 1
+        reg = config.registries[0]
+        assert reg.name == "anthropic-agent-skills"
+        assert reg.registry_type == RegistryType.CLAUDE_MARKETPLACE
+        assert reg.url == "https://github.com/anthropics/skills"
+
+    def test_loads_registry_short_form(self) -> None:
+        yaml_content = """\
+version: 1
+registries:
+  claude-plugins-official: https://github.com/anthropics/claude-plugins-official
+prompts: []
+"""
+        config = YamlLoader.load(yaml_content)
+        assert len(config.registries) == 1
+        reg = config.registries[0]
+        assert reg.name == "claude-plugins-official"
+        assert reg.registry_type == RegistryType.CLAUDE_MARKETPLACE
+        assert reg.url == "https://github.com/anthropics/claude-plugins-official"
+
+    def test_registry_type_defaults_to_claude_marketplace(self) -> None:
+        yaml_content = """\
+version: 1
+registries:
+  anthropic-agent-skills:
+    url: https://github.com/anthropics/skills
+prompts: []
+"""
+        config = YamlLoader.load(yaml_content)
+        assert config.registries[0].registry_type == RegistryType.CLAUDE_MARKETPLACE
+
+    def test_loads_multiple_registries(self) -> None:
+        yaml_content = """\
+version: 1
+registries:
+  anthropic-agent-skills:
+    url: https://github.com/anthropics/skills
+  claude-plugins-official: https://github.com/anthropics/claude-plugins-official
+prompts: []
+"""
+        config = YamlLoader.load(yaml_content)
+        assert len(config.registries) == 2
+        names = {r.name for r in config.registries}
+        assert names == {"anthropic-agent-skills", "claude-plugins-official"}
+
+    def test_empty_registries_when_missing(self) -> None:
+        config = YamlLoader.load(MINIMAL_CONFIG)
+        assert config.registries == []
+
+
+class TestYamlLoaderPrompts:
+    def test_loads_string_form_prompt(self) -> None:
         yaml_content = """\
 version: 1
 prompts:
-  - name: code-reviewer
-    source: anthropic/code-reviewer
-    artifact_type: skill
-    platforms:
-      - cursor
-      - claude-code
+  - claude-plugins-official/code-review
 """
         config = YamlLoader.load(yaml_content)
         assert len(config.prompt_specs) == 1
         spec = config.prompt_specs[0]
-        assert spec.name == "code-reviewer"
-        assert spec.source == "anthropic/code-reviewer"
-        assert spec.artifact_type == ArtifactType.SKILL
-        assert PlatformTarget.CURSOR in spec.platforms
-        assert PlatformTarget.CLAUDE_CODE in spec.platforms
+        assert spec.source == "claude-plugins-official/code-review"
+        assert spec.name == "code-review"
+        assert spec.platforms == ()
 
-    def test_loads_multiple_prompt_specs(self) -> None:
+    def test_loads_object_form_prompt(self) -> None:
         yaml_content = """\
 version: 1
 prompts:
-  - name: code-reviewer
-    source: anthropic/code-reviewer
-    artifact_type: rule
+  - source: claude-plugins-official/code-review
+    name: my-reviewer
     platforms:
       - cursor
-  - name: test-writer
-    source: local/test-writer
-    artifact_type: agent
-    platforms:
-      - claude-code
 """
         config = YamlLoader.load(yaml_content)
-        assert len(config.prompt_specs) == 2
-        assert config.prompt_specs[0].name == "code-reviewer"
-        assert config.prompt_specs[0].artifact_type == ArtifactType.RULE
-        assert config.prompt_specs[1].name == "test-writer"
-        assert config.prompt_specs[1].artifact_type == ArtifactType.AGENT
+        assert len(config.prompt_specs) == 1
+        spec = config.prompt_specs[0]
+        assert spec.source == "claude-plugins-official/code-review"
+        assert spec.name == "my-reviewer"
+        assert PlatformTarget.CURSOR in spec.platforms
 
-    def test_loads_all_artifact_types(self) -> None:
+    def test_object_form_name_defaults_to_source_name(self) -> None:
         yaml_content = """\
 version: 1
 prompts:
-  - name: p1
-    source: local/p1
-    artifact_type: skill
-  - name: p2
-    source: local/p2
-    artifact_type: rule
-  - name: p3
-    source: local/p3
-    artifact_type: agent
-  - name: p4
-    source: local/p4
-    artifact_type: command
-  - name: p5
-    source: local/p5
-    artifact_type: subagent
+  - source: claude-plugins-official/code-review
 """
         config = YamlLoader.load(yaml_content)
-        assert len(config.prompt_specs) == 5
-        assert config.prompt_specs[0].artifact_type == ArtifactType.SKILL
-        assert config.prompt_specs[1].artifact_type == ArtifactType.RULE
-        assert config.prompt_specs[2].artifact_type == ArtifactType.AGENT
-        assert config.prompt_specs[3].artifact_type == ArtifactType.COMMAND
-        assert config.prompt_specs[4].artifact_type == ArtifactType.SUBAGENT
+        assert config.prompt_specs[0].name == "code-review"
 
     def test_loads_prompt_without_platforms(self) -> None:
         yaml_content = """\
 version: 1
 prompts:
-  - name: code-reviewer
-    source: anthropic/code-reviewer
-    artifact_type: rule
+  - source: claude-plugins-official/code-review
 """
         config = YamlLoader.load(yaml_content)
         assert config.prompt_specs[0].platforms == ()
 
-    def test_loads_platform_output_dirs(self) -> None:
+    def test_loads_multiple_prompts_mixed_forms(self) -> None:
+        yaml_content = """\
+version: 1
+prompts:
+  - claude-plugins-official/code-review
+  - source: anthropic-agent-skills/feature-dev
+    name: my-feature
+    platforms:
+      - claude-code
+"""
+        config = YamlLoader.load(yaml_content)
+        assert len(config.prompt_specs) == 2
+        assert config.prompt_specs[0].name == "code-review"
+        assert config.prompt_specs[1].name == "my-feature"
+        assert PlatformTarget.CLAUDE_CODE in config.prompt_specs[1].platforms
+
+    def test_loads_empty_prompts(self) -> None:
+        config = YamlLoader.load(MINIMAL_CONFIG)
+        assert config.prompt_specs == []
+
+
+class TestYamlLoaderPlatforms:
+    def test_loads_platform_object_form(self) -> None:
+        yaml_content = """\
+version: 1
+prompts: []
+platforms:
+  cursor:
+    type: cursor
+    output_dir: .cursor
+"""
+        config = YamlLoader.load(yaml_content)
+        assert len(config.platform_configs) == 1
+        pc = config.platform_configs[0]
+        assert pc.name == "cursor"
+        assert pc.platform_type == PlatformTarget.CURSOR
+        assert pc.output_dir == ".cursor"
+
+    def test_loads_platform_short_form(self) -> None:
+        yaml_content = """\
+version: 1
+prompts: []
+platforms:
+  claude-code: .claude
+"""
+        config = YamlLoader.load(yaml_content)
+        assert len(config.platform_configs) == 1
+        pc = config.platform_configs[0]
+        assert pc.name == "claude-code"
+        assert pc.platform_type == PlatformTarget.CLAUDE_CODE
+        assert pc.output_dir == ".claude"
+
+    def test_loads_platform_minimal_form(self) -> None:
+        yaml_content = """\
+version: 1
+prompts: []
+platforms:
+  cursor:
+"""
+        config = YamlLoader.load(yaml_content)
+        assert len(config.platform_configs) == 1
+        pc = config.platform_configs[0]
+        assert pc.name == "cursor"
+        assert pc.platform_type == PlatformTarget.CURSOR
+        assert pc.output_dir == ".cursor"
+
+    def test_platform_type_defaults_to_key_name(self) -> None:
+        yaml_content = """\
+version: 1
+prompts: []
+platforms:
+  cursor:
+    output_dir: /custom/cursor
+"""
+        config = YamlLoader.load(yaml_content)
+        assert config.platform_configs[0].platform_type == PlatformTarget.CURSOR
+
+    def test_platform_output_dir_defaults_per_type(self) -> None:
+        yaml_content = """\
+version: 1
+prompts: []
+platforms:
+  cursor:
+  claude-code:
+"""
+        config = YamlLoader.load(yaml_content)
+        dirs = {pc.name: pc.output_dir for pc in config.platform_configs}
+        assert dirs["cursor"] == ".cursor"
+        assert dirs["claude-code"] == ".claude"
+
+    def test_loads_default_platforms_when_missing(self) -> None:
+        config = YamlLoader.load(MINIMAL_CONFIG)
+        assert len(config.platform_configs) == 2
+        names = {pc.name for pc in config.platform_configs}
+        assert names == {"cursor", "claude-code"}
+
+    def test_loads_multiple_platforms(self) -> None:
         yaml_content = """\
 version: 1
 prompts: []
 platforms:
   cursor:
     output_dir: .cursor
-  claude-code:
-    output_dir: .claude
+  claude-code: .claude
 """
         config = YamlLoader.load(yaml_content)
-        assert config.platform_output_dirs[PlatformTarget.CURSOR] == ".cursor"
-        assert config.platform_output_dirs[PlatformTarget.CLAUDE_CODE] == ".claude"
-
-    def test_loads_default_output_dirs_when_missing(self) -> None:
-        yaml_content = "version: 1\nprompts: []\n"
-        config = YamlLoader.load(yaml_content)
-        assert config.platform_output_dirs[PlatformTarget.CURSOR] == ".cursor"
-        assert config.platform_output_dirs[PlatformTarget.CLAUDE_CODE] == ".claude"
+        assert len(config.platform_configs) == 2
 
 
 class TestYamlLoaderInvalidConfig:
@@ -138,56 +255,33 @@ class TestYamlLoaderInvalidConfig:
         yaml_content = """\
 version: 1
 prompts:
-  - name: test
-    source: local/test
-    artifact_type: rule
+  - source: claude-plugins-official/test
     platforms:
       - invalid-platform
 """
         with pytest.raises(ValidationError, match="Unknown platform"):
             YamlLoader.load(yaml_content)
 
-    def test_raises_on_prompt_missing_name(self) -> None:
-        yaml_content = """\
-version: 1
-prompts:
-  - source: local/test
-    artifact_type: rule
-"""
-        with pytest.raises(ValidationError, match="name"):
-            YamlLoader.load(yaml_content)
-
-    def test_raises_on_prompt_missing_source(self) -> None:
+    def test_raises_on_prompt_missing_source_in_object_form(self) -> None:
         yaml_content = """\
 version: 1
 prompts:
   - name: test
-    artifact_type: rule
 """
         with pytest.raises(ValidationError, match="source"):
-            YamlLoader.load(yaml_content)
-
-    def test_raises_on_prompt_missing_artifact_type(self) -> None:
-        yaml_content = """\
-version: 1
-prompts:
-  - name: test
-    source: local/test
-"""
-        with pytest.raises(ValidationError, match="artifact_type"):
-            YamlLoader.load(yaml_content)
-
-    def test_raises_on_invalid_artifact_type(self) -> None:
-        yaml_content = """\
-version: 1
-prompts:
-  - name: test
-    source: local/test
-    artifact_type: invalid
-"""
-        with pytest.raises(ValidationError, match="Unknown artifact type"):
             YamlLoader.load(yaml_content)
 
     def test_raises_on_non_dict_yaml(self) -> None:
         with pytest.raises(ValidationError, match="mapping"):
             YamlLoader.load("- item1\n- item2\n")
+
+    def test_raises_on_invalid_platform_key(self) -> None:
+        yaml_content = """\
+version: 1
+prompts: []
+platforms:
+  invalid-platform:
+    output_dir: .invalid
+"""
+        with pytest.raises(ValidationError, match="Unknown platform"):
+            YamlLoader.load(yaml_content)

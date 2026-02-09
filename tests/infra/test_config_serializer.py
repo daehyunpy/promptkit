@@ -16,12 +16,13 @@ def test_serialize_produces_valid_yaml() -> None:
 
 
 def test_serialize_contains_required_fields() -> None:
-    """Serialized YAML should contain version, prompts, and platforms."""
+    """Serialized YAML should contain version, registries, prompts, and platforms."""
     config = ProjectConfig.default()
 
     result = yaml.safe_load(serialize_config_to_yaml(config))
 
     assert result["version"] == 1
+    assert "registries" in result
     assert "prompts" in result
     assert "platforms" in result
 
@@ -33,4 +34,14 @@ def test_serialize_includes_example_when_prompts_empty() -> None:
     yaml_str = serialize_config_to_yaml(config)
 
     assert "# Example prompt entry" in yaml_str
-    assert "# - name: code-reviewer" in yaml_str
+    assert "# - claude-plugins-official/code-review" in yaml_str
+
+
+def test_serialize_includes_registries() -> None:
+    """Serialized YAML should include the configured registries."""
+    config = ProjectConfig.default()
+
+    result = yaml.safe_load(serialize_config_to_yaml(config))
+
+    assert "anthropic-agent-skills" in result["registries"]
+    assert "claude-plugins-official" in result["registries"]

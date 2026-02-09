@@ -19,12 +19,14 @@ class LockFile:
         """Serialize lock entries to YAML string."""
         prompts_data: list[dict[str, Any]] = []
         for entry in entries:
-            prompts_data.append({
-                "name": entry.name,
-                "source": entry.source,
-                "hash": entry.content_hash,
-                "fetched_at": entry.fetched_at.isoformat(),
-            })
+            prompts_data.append(
+                {
+                    "name": entry.name,
+                    "source": entry.source,
+                    "hash": entry.content_hash,
+                    "fetched_at": entry.fetched_at.isoformat(),
+                }
+            )
 
         data: dict[str, Any] = {
             "version": LOCK_VERSION,

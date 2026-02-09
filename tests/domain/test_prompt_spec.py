@@ -1,4 +1,6 @@
-"""Tests for PromptSpec value object."""
+"""Tests for PromptSpec value object and ArtifactType enum."""
+
+import pytest
 
 from promptkit.domain.platform_target import PlatformTarget
 from promptkit.domain.prompt_spec import ArtifactType, PromptSpec
@@ -24,94 +26,78 @@ class TestArtifactType:
         assert ArtifactType.from_string("skill") == ArtifactType.SKILL
 
     def test_from_string_invalid_raises(self) -> None:
-        try:
+        with pytest.raises(ValueError, match="invalid"):
             ArtifactType.from_string("invalid")
-            assert False, "Expected ValueError"
-        except ValueError as e:
-            assert "invalid" in str(e)
 
 
 class TestPromptSpec:
-    def test_create_with_required_fields(self) -> None:
-        spec = PromptSpec(
-            name="code-reviewer",
-            source="anthropic/code-reviewer",
-            artifact_type=ArtifactType.RULE,
-        )
-        assert spec.name == "code-reviewer"
-        assert spec.source == "anthropic/code-reviewer"
-        assert spec.artifact_type == ArtifactType.RULE
+    def test_create_with_source_only(self) -> None:
+        spec = PromptSpec(source="claude-plugins-official/code-review")
+        assert spec.source == "claude-plugins-official/code-review"
+        assert spec.name == "code-review"
         assert spec.platforms == ()
+
+    def test_name_derived_from_source(self) -> None:
+        spec = PromptSpec(source="anthropic-agent-skills/feature-dev")
+        assert spec.name == "feature-dev"
+
+    def test_explicit_name_overrides_derived(self) -> None:
+        spec = PromptSpec(
+            source="claude-plugins-official/code-review",
+            name="my-reviewer",
+        )
+        assert spec.name == "my-reviewer"
+
+    def test_create_with_platforms(self) -> None:
+        spec = PromptSpec(
+            source="claude-plugins-official/code-review",
+            platforms=(PlatformTarget.CURSOR,),
+        )
+        assert spec.platforms == (PlatformTarget.CURSOR,)
 
     def test_create_with_all_fields(self) -> None:
         spec = PromptSpec(
-            name="code-reviewer",
-            source="anthropic/code-reviewer",
-            artifact_type=ArtifactType.SKILL,
+            source="claude-plugins-official/code-review",
+            name="my-reviewer",
             platforms=(PlatformTarget.CURSOR, PlatformTarget.CLAUDE_CODE),
         )
-        assert spec.name == "code-reviewer"
-        assert spec.source == "anthropic/code-reviewer"
+        assert spec.source == "claude-plugins-official/code-review"
+        assert spec.name == "my-reviewer"
         assert len(spec.platforms) == 2
-        assert spec.artifact_type == ArtifactType.SKILL
 
     def test_is_immutable(self) -> None:
-        spec = PromptSpec(
-            name="test", source="local/test", artifact_type=ArtifactType.RULE
-        )
-        try:
+        spec = PromptSpec(source="claude-plugins-official/code-review")
+        with pytest.raises(AttributeError):
             spec.name = "other"  # type: ignore[misc]
-            assert False, "Expected FrozenInstanceError"
-        except AttributeError:
-            pass
-
-    def test_is_local_source(self) -> None:
-        spec = PromptSpec(
-            name="test", source="local/test", artifact_type=ArtifactType.RULE
-        )
-        assert spec.is_local_source is True
-
-    def test_is_not_local_source(self) -> None:
-        spec = PromptSpec(
-            name="test",
-            source="anthropic/code-reviewer",
-            artifact_type=ArtifactType.RULE,
-        )
-        assert spec.is_local_source is False
 
     def test_targets_platform_when_included(self) -> None:
         spec = PromptSpec(
-            name="test",
-            source="local/test",
-            artifact_type=ArtifactType.RULE,
+            source="claude-plugins-official/code-review",
             platforms=(PlatformTarget.CURSOR,),
         )
         assert spec.targets_platform(PlatformTarget.CURSOR) is True
 
     def test_does_not_target_platform_when_excluded(self) -> None:
         spec = PromptSpec(
-            name="test",
-            source="local/test",
-            artifact_type=ArtifactType.RULE,
+            source="claude-plugins-official/code-review",
             platforms=(PlatformTarget.CURSOR,),
         )
         assert spec.targets_platform(PlatformTarget.CLAUDE_CODE) is False
 
     def test_targets_all_platforms_when_empty(self) -> None:
-        spec = PromptSpec(
-            name="test",
-            source="local/test",
-            artifact_type=ArtifactType.RULE,
-            platforms=(),
-        )
+        spec = PromptSpec(source="claude-plugins-official/code-review")
         assert spec.targets_platform(PlatformTarget.CURSOR) is True
         assert spec.targets_platform(PlatformTarget.CLAUDE_CODE) is True
 
+    def test_registry_name_extracted_from_source(self) -> None:
+        spec = PromptSpec(source="anthropic-agent-skills/feature-dev")
+        assert spec.registry_name == "anthropic-agent-skills"
+
+    def test_prompt_name_extracted_from_source(self) -> None:
+        spec = PromptSpec(source="anthropic-agent-skills/feature-dev")
+        assert spec.prompt_name == "feature-dev"
+
     def test_equality_same_values(self) -> None:
-        s1 = PromptSpec(
-            name="test", source="local/test", artifact_type=ArtifactType.RULE
-        )
-        s2 = PromptSpec(
-            name="test", source="local/test", artifact_type=ArtifactType.RULE
-        )
+        s1 = PromptSpec(source="claude-plugins-official/code-review")
+        s2 = PromptSpec(source="claude-plugins-official/code-review")
         assert s1 == s2

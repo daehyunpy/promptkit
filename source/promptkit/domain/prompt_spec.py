@@ -5,8 +5,6 @@ from enum import Enum
 
 from promptkit.domain.platform_target import PlatformTarget
 
-LOCAL_SOURCE_PREFIX = "local/"
-
 
 class ArtifactType(Enum):
     """Type of artifact a prompt produces in a platform."""
@@ -33,20 +31,30 @@ class ArtifactType(Enum):
 
 @dataclass(frozen=True)
 class PromptSpec:
-    """Immutable specification for a prompt (source, name, platforms, artifact type).
+    """Immutable specification for a prompt from promptkit.yaml.
 
-    Defined in promptkit.yaml — declares what to sync and where to build.
+    Declares which prompt to fetch and where to build it.
+    The source format is 'registry/name' (e.g., 'claude-plugins-official/code-review').
+    Name defaults to the part after '/' in the source if not explicitly set.
     """
 
-    name: str
     source: str
-    artifact_type: ArtifactType
+    name: str = ""
     platforms: tuple[PlatformTarget, ...] = field(default_factory=tuple)
 
+    def __post_init__(self) -> None:
+        if not self.name:
+            object.__setattr__(self, "name", self.prompt_name)
+
     @property
-    def is_local_source(self) -> bool:
-        """Whether this prompt comes from the local .agents/ directory."""
-        return self.source.startswith(LOCAL_SOURCE_PREFIX)
+    def registry_name(self) -> str:
+        """The registry part of the source (before '/')."""
+        return self.source.split("/", 1)[0]
+
+    @property
+    def prompt_name(self) -> str:
+        """The prompt name part of the source (after '/')."""
+        return self.source.split("/", 1)[1]
 
     def targets_platform(self, platform: PlatformTarget, /) -> bool:
         """Whether this prompt targets the given platform.

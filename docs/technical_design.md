@@ -33,20 +33,20 @@ promptkit is a Python-based CLI tool with a three-layer architecture:
 
 **Config Layer** - Declarative configuration and version locking
 ```
-promptkit.yaml          # Declares which prompts to use and target platforms
+promptkit.yaml          # Declares registries, prompts, and target platforms
 promptkit.lock          # Locks exact versions/hashes for reproducibility
 ```
 
 **Source Layer** - Prompt sources (synced + canonical)
 ```
-.promptkit/cache/       # Cached upstream prompts (gitignored)
-.agents/                # Canonical/custom prompts (committed to git)
+.promptkit/cache/       # Cached remote prompts (gitignored)
+.agents/                # Local/custom prompts (committed to git, auto-built)
 ```
 
 **Output Layer** - Generated platform-specific artifacts
 ```
-.cursor/                # Generated Cursor artifacts (agents, skills-cursor, rules, commands)
-.claude/                # Generated Claude Code artifacts (skills, rules, subagents, commands)
+.cursor/                # Generated Cursor artifacts
+.claude/                # Generated Claude Code artifacts
 ```
 
 ### Command Model
@@ -74,11 +74,11 @@ Manifest (promptkit.yaml)  →  Lockfile (promptkit.lock)  →  Artifacts (.curs
 
 1. **Init** - `promptkit init` scaffolds a new project with config, directories, and gitignore.
 
-2. **Configure** - User edits `promptkit.yaml` to declare which prompts to use and which platforms to target.
+2. **Configure** - User edits `promptkit.yaml` to declare registries and which prompts to use.
 
-3. **Sync** - `promptkit sync` fetches prompts from sources, caches them in `.promptkit/cache/`, updates `promptkit.lock` with content hashes, and generates platform-specific artifacts in `.cursor/` and `.claude/`.
+3. **Sync** - `promptkit sync` fetches prompts from registries, caches them in `.promptkit/cache/`, updates `promptkit.lock` with content hashes, and generates platform-specific artifacts in `.cursor/` and `.claude/`.
 
-4. **Define** - Users write canonical/custom prompts in `.agents/` (committed to version control).
+4. **Define** - Users write local prompts in `.agents/` (committed to version control). These are automatically included in every build — no config entry needed.
 
 5. **Rebuild** - After config changes or git operations, `promptkit build` regenerates artifacts from cache without re-fetching.
 
@@ -86,9 +86,254 @@ Manifest (promptkit.yaml)  →  Lockfile (promptkit.lock)  →  Artifacts (.curs
 
 - ✅ `promptkit.yaml` - config
 - ✅ `promptkit.lock` - version locks
-- ✅ `.agents/` - canonical prompts
-- ❌ `.promptkit/cache/` - cached upstream prompts (reproducible via lock file)
+- ✅ `.agents/` - local/custom prompts
+- ❌ `.promptkit/cache/` - cached remote prompts (reproducible via lock file)
 - ⚠️  `.cursor/`, `.claude/` - generated artifacts (recommended to gitignore, but user's choice)
+
+## Configuration Schema
+
+### promptkit.yaml
+
+```yaml
+version: 1
+
+# Registries define where to fetch remote prompts
+# type defaults to "claude-marketplace" if omitted
+registries:
+  # Object form (full)
+  anthropic-agent-skills:
+    type: claude-marketplace
+    url: https://github.com/anthropics/skills
+
+  # Short form: key: <url> (type defaults to claude-marketplace)
+  claude-plugins-official: https://github.com/anthropics/claude-plugins-official
+
+prompts:
+  # Simple form: registry/name
+  - claude-plugins-official/code-review
+  - anthropic-agent-skills/feature-dev
+
+  # Object form: with overrides
+  - source: claude-plugins-official/code-review
+    name: my-reviewer              # optional, defaults to "code-review"
+    platforms:                      # optional, defaults to all
+      - cursor
+
+  # Version pinning (post-MVP, reserved syntax)
+  # - claude-plugins-official/code-review@1.2.0
+
+# Platforms define build targets
+# type defaults to key name, output_dir has defaults per type
+platforms:
+  # Object form (full)
+  cursor:
+    type: cursor
+    output_dir: .cursor
+
+  # Short form: key: <output_dir>
+  claude-code: .claude
+
+  # Minimal form: key with no value (all defaults)
+  # cursor:
+```
+
+**Key design points:**
+- Prompts can be strings (`registry/name`) or objects (with overrides)
+- `name` defaults to the part after `/` in the source
+- `platforms` defaults to all platforms defined in the config
+- `artifact_type` is NOT in the config — it comes from the prompt's frontmatter
+- `.agents/` prompts are auto-included — no config entry needed
+- `@version` syntax reserved for future version pinning (MVP always fetches latest)
+
+**Short forms:**
+- **Registries** support three forms:
+  - Full: `key: {type: ..., url: ...}`
+  - Short: `key: <url>` (string value = URL, type defaults to `claude-marketplace`)
+- **Platforms** support three forms:
+  - Full: `key: {type: ..., output_dir: ...}`
+  - Short: `key: <output_dir>` (string value = output_dir, type defaults to key name)
+  - Minimal: `key:` with no value (all defaults: type = key name, output_dir = default)
+
+**Defaults:**
+- Registry `type` defaults to `claude-marketplace` when omitted
+- Platform `type` defaults to the key name when omitted (e.g., `cursor:` → type `cursor`)
+- Platform `output_dir` defaults per type: `cursor` → `.cursor`, `claude-code` → `.claude`
+
+### MVP Registries
+
+| Registry Name | GitHub Repo | Description |
+|---|---|---|
+| `anthropic-agent-skills` | `anthropics/skills` | Anthropic's curated agent skills |
+| `claude-plugins-official` | `anthropics/claude-plugins-official` | Official Claude plugins |
+
+### Registry Types
+
+| Type | Fetcher | Description |
+|---|---|---|
+| `claude-marketplace` | `ClaudeMarketplaceFetcher` | Prompts from Claude plugin marketplace (GitHub-hosted) |
+
+MVP supports `claude-marketplace` only. The type determines which `PromptFetcher` implementation to use. If `type` is omitted in a registry definition, it defaults to `claude-marketplace`.
+
+### Platform Types
+
+| Type | Builder | Description |
+|---|---|---|
+| `cursor` | `CursorBuilder` | Generates `.cursor/` artifacts |
+| `claude-code` | `ClaudeBuilder` | Generates `.claude/` artifacts |
+
+The type determines which `ArtifactBuilder` implementation to use. If `type` is omitted in a platform definition, it defaults to the platform's key name (e.g., `cursor:` defaults to type `cursor`).
+
+**Default output directories:**
+
+| Platform Type | Default `output_dir` |
+|---|---|
+| `cursor` | `.cursor` |
+| `claude-code` | `.claude` |
+
+### promptkit.lock
+
+```yaml
+version: 1
+
+prompts:
+  - name: code-review
+    source: claude-plugins-official/code-review
+    hash: sha256:abc123...
+    fetched_at: '2026-02-08T14:50:00+00:00'
+
+  - name: feature-dev
+    source: anthropic-agent-skills/feature-dev
+    hash: sha256:def456...
+    fetched_at: '2026-02-08T14:50:00+00:00'
+
+local:
+  - name: my-custom-rule
+    hash: sha256:789xyz...
+    fetched_at: '2026-02-08T15:00:00+00:00'
+```
+
+Lock file tracks both remote prompts (from registries) and local prompts (from `.agents/`).
+
+## Prompt Format
+
+Prompts use **Markdown with YAML frontmatter**. The frontmatter declares metadata including `artifact_type`, which determines where the prompt is placed in each platform's directory structure.
+
+```markdown
+---
+artifact_type: skill
+description: Reviews code for bugs and style issues
+author: Anthropic
+---
+
+# Code Reviewer
+
+You are an expert code reviewer. Review the following code for:
+- Bugs and logic errors
+- Code style and best practices
+- Performance issues
+
+Be constructive and specific in your feedback.
+```
+
+**Required frontmatter fields:**
+- `artifact_type` - Where to place the prompt: `skill`, `rule`, `agent`, `command`, `subagent`
+
+**Optional frontmatter fields:**
+- `description` - Brief description (for display)
+- `author` - Prompt author/maintainer
+
+The `name` comes from the filename (e.g., `code-review.md` → name `code-review`), not frontmatter. This matches how `.agents/` files work — the filename IS the identity.
+
+The entire file (including frontmatter) is the content that gets hashed and cached. Frontmatter is parsed at build time to determine artifact routing.
+
+## Build System
+
+### Build Process
+
+Build is a deterministic, offline operation. It reads cached/local prompts and generates platform artifacts:
+
+1. **Load Config** - Parse `promptkit.yaml` for platform definitions
+2. **Load Lock** - Parse `promptkit.lock` for content hashes (verification)
+3. **Read Prompts** - Load prompt content from `.promptkit/cache/` (remote) and `.agents/` (local)
+4. **Parse Frontmatter** - Extract `artifact_type` from each prompt's YAML frontmatter
+5. **Route** - Map each prompt to the correct output directory based on `artifact_type` and platform type
+6. **Generate** - Write artifacts to platform output directories
+
+Build does **not** transform prompt content. It copies content to the correct platform directory. This keeps builds deterministic — same inputs always produce identical outputs.
+
+### Platform Artifact Mapping
+
+Each `artifact_type` (from frontmatter) maps to a specific subdirectory per platform:
+
+| ArtifactType | Cursor output | Claude Code output |
+|---|---|---|
+| `skill` | `.cursor/skills-cursor/<name>.md` | `.claude/skills/<name>.md` |
+| `rule` | `.cursor/rules/<name>.md` | `.claude/rules/<name>.md` |
+| `agent` | `.cursor/agents/<name>.md` | `.claude/agents/<name>.md` |
+| `command` | `.cursor/commands/<name>.md` | `.claude/commands/<name>.md` |
+| `subagent` | `.cursor/subagents/<name>.md` | `.claude/subagents/<name>.md` |
+
+### Determinism
+
+- Sort all outputs alphabetically
+- Use stable hashing (SHA256)
+- No timestamps in generated files
+- No AI transformation in the build pipeline — deterministic copy + route only
+- Consistent formatting (YAML, Markdown)
+
+### Future: AI-Assisted Transformation
+
+Post-MVP, we may need AI to adapt prompts between platform formats (e.g., converting a Cursor-specific prompt to Claude Code conventions). If added, the approach would be:
+
+- Transform once during `lock`, not during `build`
+- Cache the transformed output alongside the original
+- `build` always uses cached transforms — never calls an LLM
+- Lock file records both original and transformed hashes
+
+This preserves deterministic builds while allowing intelligent adaptation. Not needed for MVP where build is a simple copy + route operation.
+
+## Lock Process
+
+### Lock Algorithm
+
+1. Parse `promptkit.yaml` to get registries and prompt specs
+2. Load existing `promptkit.lock` (if any) for comparison
+3. For each remote prompt spec:
+   - Resolve registry from source prefix (e.g., `anthropic/` → `anthropic` registry)
+   - Fetch content using registry's fetcher
+   - Compute SHA256 hash of content
+   - Compare with existing lock entry
+   - If changed or new: update cache in `.promptkit/cache/` and create new lock entry
+   - If unchanged: keep existing lock entry (preserves `fetched_at`)
+4. For each local prompt (`.agents/*.md`):
+   - Read file content
+   - Compute SHA256 hash
+   - Update lock entry if changed
+5. Write updated `promptkit.lock`
+
+### Lock Benefits
+
+- **CI validation** — `promptkit validate` can check if lockfile is stale (config changed without re-locking)
+- **Reproducibility** — lock captures exact content hashes; `build` uses cached content from lock
+- **Code review** — lock changes show up as a reviewable diff separate from artifact changes
+- **Offline builds** — `lock` once with network, then `build` anywhere without network
+
+## Prompt Cache
+
+### Content-Addressable Storage
+
+The cache (`.promptkit/cache/`) uses content-addressable storage, similar to git objects. Files are named by their SHA256 content hash:
+
+```
+.promptkit/cache/
+  sha256-abc123def456.md
+  sha256-789xyz000111.md
+```
+
+The lockfile maps `name → hash`, the cache maps `hash → content`. This gives us:
+- **No naming conflicts** — two prompts with the same name but different content get different cache entries
+- **Deduplication** — identical content from different sources shares one cache file
+- **Integrity verification** — cache filename = content hash, trivially verifiable
 
 ## Directory Layout
 
@@ -109,6 +354,8 @@ promptkit/
 │       │   ├── prompt_spec.py        # PromptSpec value object
 │       │   ├── prompt_metadata.py    # PromptMetadata value object
 │       │   ├── lock_entry.py         # LockEntry value object
+│       │   ├── registry.py           # Registry value object
+│       │   ├── platform_config.py    # PlatformConfig value object
 │       │   ├── platform_target.py    # PlatformTarget enum
 │       │   ├── errors.py             # Domain errors
 │       │   └── protocols.py          # PromptFetcher, ArtifactBuilder protocols
@@ -126,8 +373,7 @@ promptkit/
 │           │   ├── yaml_loader.py    # Load promptkit.yaml
 │           │   └── lock_file.py      # Read/write promptkit.lock
 │           ├── fetchers/
-│           │   ├── claude_marketplace.py  # Fetch from Claude marketplace
-│           │   └── local_file.py     # Read from .agents/
+│           │   └── claude_marketplace.py  # Fetch from Claude marketplace
 │           ├── builders/
 │           │   ├── cursor_builder.py # Generate .cursor/ artifacts
 │           │   └── claude_builder.py # Generate .claude/ artifacts
@@ -135,24 +381,13 @@ promptkit/
 │               └── cache.py          # Manage .promptkit/cache/
 │
 ├── tests/                            # Tests mirror source/ structure
-│   ├── conftest.py
-│   ├── domain/
-│   │   ├── test_prompt.py
-│   │   ├── test_prompt_spec.py
-│   │   └── ...
-│   ├── app/
-│   │   ├── test_lock.py
-│   │   └── test_build.py
-│   └── infra/
-│       ├── test_yaml_loader.py
-│       └── test_cursor_builder.py
 │
 ├── pyproject.toml                    # Python project config
 ├── uv.lock                           # Locked dependencies
 │
-├── promptkit.yaml                    # Example config (not committed in user projects)
-├── .promptkit/cache/                 # Cached prompts (gitignored)
-├── .agents/                          # Canonical prompts (committed)
+├── promptkit.yaml                    # Config
+├── .promptkit/cache/                 # Cached remote prompts (gitignored)
+├── .agents/                          # Local prompts (committed, auto-built)
 ├── .cursor/                          # Generated Cursor artifacts
 └── .claude/                          # Generated Claude Code artifacts
 ```
@@ -164,17 +399,19 @@ promptkit/
 Pure business logic. No dependencies on infrastructure.
 
 **Entities:**
-- `Prompt` - Aggregate root. Has identity, tracks state (synced, built, etc.)
+- `Prompt` - Aggregate root. Identity via name. Holds content, artifact_type (from frontmatter), and platform targeting.
 
 **Value Objects:**
-- `PromptSpec` - Immutable prompt specification (source, name, platforms, artifact_type)
-- `LockEntry` - Immutable lock entry (hash, timestamp)
-- `PromptMetadata` - Immutable metadata (author, description, version)
+- `PromptSpec` - Immutable prompt specification from config (source, optional name, optional platforms)
+- `LockEntry` - Immutable lock entry (name, source, hash, timestamp)
+- `PromptMetadata` - Immutable metadata (description, author — from frontmatter)
+- `Registry` - Immutable registry definition (name, type, url)
+- `PlatformConfig` - Immutable platform definition (name, type, output_dir)
 - `PlatformTarget` - Enum (CURSOR, CLAUDE_CODE)
 - `ArtifactType` - Enum (SKILL, RULE, AGENT, COMMAND, SUBAGENT)
 
 **Protocols:**
-- `PromptFetcher` - Protocol for fetching prompts from sources
+- `PromptFetcher` - Protocol for fetching prompts from registries
 - `ArtifactBuilder` - Protocol for building platform-specific artifacts
 
 **Domain Errors:**
@@ -203,13 +440,12 @@ Adapters for external systems (file I/O, HTTP, YAML parsing).
 - `YamlLoader` - Load and parse promptkit.yaml
 - `LockFile` - Read/write promptkit.lock
 
-**Fetchers (implement PromptFetcher):**
-- `ClaudeMarketplaceFetcher` - Fetch from Claude plugin marketplace
-- `LocalFileFetcher` - Read from .agents/
+**Fetchers (implement PromptFetcher, selected by registry type):**
+- `ClaudeMarketplaceFetcher` - Fetch from Claude marketplace (type: `claude-marketplace`)
 
-**Builders (implement ArtifactBuilder):**
-- `CursorBuilder` - Generate .cursor/ artifacts
-- `ClaudeBuilder` - Generate .claude/ artifacts
+**Builders (implement ArtifactBuilder, selected by platform type):**
+- `CursorBuilder` - Generate .cursor/ artifacts (type: `cursor`)
+- `ClaudeBuilder` - Generate .claude/ artifacts (type: `claude-code`)
 
 **Storage:**
 - `PromptCache` - Manage .promptkit/cache/
@@ -262,154 +498,6 @@ Defined in `pyproject.toml`:
 promptkit = "promptkit.cli:app"
 ```
 
-## Configuration Schemas
-
-### promptkit.yaml
-
-```yaml
-# Which prompts to use
-prompts:
-  - name: code-reviewer
-    source: anthropic/code-reviewer  # Fetch from Claude marketplace
-    platforms:
-      - cursor
-      - claude-code
-
-  - name: test-writer
-    source: local/test-writer         # Read from .agents/
-    platforms:
-      - cursor
-
-# Platform-specific settings (optional)
-platforms:
-  cursor:
-    output_dir: .cursor
-  claude-code:
-    output_dir: .claude
-
-# Metadata
-version: 1
-```
-
-### promptkit.lock
-
-```yaml
-# Lock file format
-version: 1
-
-prompts:
-  - name: code-reviewer
-    source: anthropic/code-reviewer
-    hash: sha256:abc123...
-    fetched_at: '2026-02-08T14:50:00+00:00'
-
-  - name: test-writer
-    source: local/test-writer
-    hash: sha256:def456...
-    fetched_at: '2026-02-08T14:50:00+00:00'
-```
-
-## Build System
-
-### Build Process
-
-Build is a deterministic, offline operation. It reads cached prompts and generates platform artifacts:
-
-1. **Load Config** - Parse `promptkit.yaml` for prompt specs and platform output dirs
-2. **Load Lock** - Parse `promptkit.lock` for content hashes (verification)
-3. **Read Prompts** - Load prompt content from `.promptkit/cache/` and `.agents/`
-4. **Route** - Map each prompt to the correct output directory based on `artifact_type` and `platform`
-5. **Generate** - Write artifacts to `.cursor/` and `.claude/`
-
-Build does **not** transform prompt content. It copies content to the correct platform directory. This keeps builds deterministic — same inputs always produce identical outputs.
-
-### Platform Artifact Mapping
-
-Each `artifact_type` maps to a specific subdirectory per platform:
-
-| ArtifactType | Cursor output | Claude Code output |
-|---|---|---|
-| `skill` | `.cursor/skills-cursor/<name>.md` | `.claude/skills/<name>.md` |
-| `rule` | `.cursor/rules/<name>.md` | `.claude/rules/<name>.md` |
-| `agent` | `.cursor/agents/<name>.md` | `.claude/agents/<name>.md` |
-| `command` | `.cursor/commands/<name>.md` | `.claude/commands/<name>.md` |
-| `subagent` | `.cursor/subagents/<name>.md` | `.claude/subagents/<name>.md` |
-
-### Determinism
-
-- Sort all outputs alphabetically
-- Use stable hashing (SHA256)
-- No timestamps in generated files
-- No AI transformation in the build pipeline — deterministic copy + route only
-- Consistent formatting (YAML, Markdown)
-
-### Future: AI-Assisted Transformation
-
-Post-MVP, we may need AI to adapt prompts between platform formats (e.g., converting a Cursor-specific prompt to Claude Code conventions). If added, the approach would be:
-
-- Transform once during `lock`, not during `build`
-- Cache the transformed output alongside the original
-- `build` always uses cached transforms — never calls an LLM
-- Lock file records both original and transformed hashes
-
-This preserves deterministic builds while allowing intelligent adaptation. Not needed for MVP where build is a simple copy + route operation.
-
-## Lock Process
-
-### Lock Algorithm
-
-1. Parse `promptkit.yaml` to get list of prompt specs
-2. Load existing `promptkit.lock` (if any) for comparison
-3. For each prompt spec:
-   - Fetch content from source (marketplace, local file, etc.)
-   - Compute SHA256 hash of content
-   - Compare with existing lock entry
-   - If changed or new: update cache in `.promptkit/cache/` and create new lock entry
-   - If unchanged: keep existing lock entry (preserves `fetched_at`)
-4. Write updated `promptkit.lock`
-
-### Lock Benefits
-
-- **CI validation** — `promptkit validate` can check if lockfile is stale (config changed without re-locking)
-- **Reproducibility** — lock captures exact content hashes; `build` uses cached content from lock
-- **Code review** — lock changes show up as a reviewable diff separate from artifact changes
-- **Offline builds** — `lock` once with network, then `build` anywhere without network
-
-## Prompt Cache
-
-### Content-Addressable Storage
-
-The cache (`.promptkit/cache/`) uses content-addressable storage, similar to git objects. Files are named by their SHA256 content hash:
-
-```
-.promptkit/cache/
-  sha256-abc123def456.md
-  sha256-789xyz000111.md
-```
-
-The lockfile maps `name → hash`, the cache maps `hash → content`. This gives us:
-- **No naming conflicts** — two prompts with the same name but different content get different cache entries
-- **Deduplication** — identical content from different sources shares one cache file
-- **Integrity verification** — cache filename = content hash, trivially verifiable
-
-### Prompt Content
-
-The entire prompt file is treated as content — including any YAML frontmatter. No frontmatter parsing at fetch time. The whole file is hashed and cached as-is. `PromptMetadata` extraction may be added post-MVP for display/search features.
-
-## Upstream Sync
-
-### Claude Plugin Marketplace
-
-**TBD:** Need to determine how to fetch prompts from Claude marketplace.
-
-Options:
-1. **Official API** - If Anthropic provides one (preferred)
-2. **GitHub Repository** - If prompts are hosted on GitHub
-3. **Web Scraping** - Last resort, fragile
-4. **Manual Registry** - Curated list of known prompts
-
-For MVP, upstream sources (non-`local/`) return a clear error: "Upstream sources not yet supported. Use local/ sources." The `ClaudeMarketplaceFetcher` is part of the MVP roadmap but not the initial implementation.
-
 ## Testing Strategy
 
 ### Unit Tests
@@ -442,21 +530,22 @@ For MVP, upstream sources (non-`local/`) return a clear error: "Upstream sources
 - Create directory structure
 - Generate template `promptkit.yaml`
 
-### Phase 3: Domain Model ✅
+### Phase 3: Domain Model ✅ (being revised)
 - Define `Prompt`, `PromptSpec`, `LockEntry`, `PromptMetadata`
+- Define `Registry`, `PlatformConfig` value objects
 - Define `PlatformTarget`, `ArtifactType` enums
 - Define protocols (`PromptFetcher`, `ArtifactBuilder`)
 - Define domain errors
 
-### Phase 4: Config Loading ✅
-- Implement YAML loader for `promptkit.yaml`
+### Phase 4: Config Loading ✅ (being revised)
+- Implement YAML loader for `promptkit.yaml` (new schema with registries, typed platforms)
 - Implement lock file reader/writer
 - Add validation logic
 
 ### Phase 5: Lock Command
-- Implement `LocalFileFetcher` for `.agents/`
+- Implement frontmatter parser (extract artifact_type)
 - Implement `PromptCache` for `.promptkit/cache/`
-- Implement `LockPrompts` use case
+- Implement `LockPrompts` use case (remote + local)
 - Add `lock` CLI command
 
 ### Phase 6: Build Command
@@ -488,74 +577,74 @@ For MVP, upstream sources (non-`local/`) return a clear error: "Upstream sources
 
 ### Resolved
 
-1. **Prompt Fetching** - Fetch from GitHub repository (Anthropic hosts prompts there)
-   - Will use GitHub API or raw.githubusercontent.com
-   - Prompts stored in a known repository structure
+1. **Config follows plugin conventions** - Inspired by Claude Code's plugin system
+   - Registries are typed and declared in config (type defaults to `claude-marketplace`)
+   - Platforms are typed (type defaults to key name, e.g., `cursor:` → type `cursor`)
+   - Types drive which fetcher/builder implementation to use
+   - Prompts can be simple strings or objects with overrides
+   - MVP registries: `anthropic-agent-skills` (anthropics/skills), `claude-plugins-official` (anthropics/claude-plugins-official)
+   - Short forms supported: registries `key: <url>`, platforms `key: <output_dir>` or `key:` (minimal)
 
-2. **Prompt Format** - Markdown with YAML frontmatter
-   ```markdown
-   ---
-   name: code-reviewer
-   description: Reviews code for bugs and style issues
-   author: Anthropic
-   version: 1.0.0
-   platforms:
-     - cursor
-     - claude-code
-   ---
+2. **Local prompts auto-included** - Everything in `.agents/` is built automatically
+   - No config entry needed for local prompts
+   - `.agents/` is scanned during both `lock` and `build`
 
-   # Code Reviewer Prompt
+3. **`artifact_type` comes from prompt frontmatter, not config**
+   - Prompt files declare their own type via YAML frontmatter
+   - Config just says "use this prompt" — the source defines what it is
+   - Matches how plugins work: the plugin knows what it is
 
-   You are an expert code reviewer...
-   ```
+4. **Frontmatter is parsed at build time**
+   - Entire file (including frontmatter) is hashed and cached as-is
+   - Frontmatter parsed during build to extract `artifact_type` for routing
+   - Hash covers the full file content
 
-3. **Platform Mapping** - Deterministic copy + route (no transformation)
-   - Each prompt specifies which platform artifact type (skill, rule, agent, etc.)
-   - Copy markdown content directly to appropriate directory based on artifact_type
+5. **Version pinning uses `@` syntax** (post-MVP)
+   - `anthropic/code-review@1.2.0` — reserved for future version pinning
+   - MVP always fetches latest from registry
+
+6. **Platform Mapping** - Deterministic copy + route (no transformation)
+   - Each prompt's frontmatter specifies `artifact_type`
+   - Copy content directly to appropriate directory based on artifact_type
    - No AI transformation in the build pipeline for MVP
 
-4. **Hash Algorithm** - SHA256 of content only (excluding timestamps)
+7. **Hash Algorithm** - SHA256 of full file content (including frontmatter)
    - Standard, secure, widely supported
-   - Hash only the content section, not metadata
 
-5. **Progress Display** - Simple text output
+8. **Progress Display** - Simple text output
    - Print status messages: "Syncing prompt 1/3..."
    - No fancy progress bars for MVP
-   - Can add `rich` library later for better UX
 
-6. **Git Integration** - Don't run git automatically
+9. **Git Integration** - Don't run git automatically
    - Promptkit doesn't execute git commands
-   - User runs `git diff` themselves to see changes
    - Keeps tool simple, no git dependency
 
-7. **Command Model** - Follow package manager conventions (uv, npm, cargo)
-   - `sync` = fetch + lock + build (the one-stop command)
-   - `lock` = fetch + update lockfile (resolve without installing)
-   - `build` = generate artifacts from cache (install from lockfile)
-   - Steps are cleanly separated internally; each is independently useful
+10. **Command Model** - Follow package manager conventions (uv, npm, cargo)
+    - `sync` = fetch + lock + build (the one-stop command)
+    - `lock` = fetch + update lockfile (resolve without installing)
+    - `build` = generate artifacts from cache (install from lockfile)
 
-8. **Artifact type is required** - `artifact_type` must be specified in `promptkit.yaml` for every prompt
-   - All 5 types supported at MVP: skill, rule, agent, command, subagent
-   - No default — validation error if omitted
-   - Config is the source of truth for where a prompt lands
+11. **Content-addressable cache** - `.promptkit/cache/` uses SHA256 hash as filename (like git objects)
+    - Lockfile maps name → hash, cache maps hash → content
+    - No naming conflicts, trivial deduplication
 
-9. **Content-addressable cache** - `.promptkit/cache/` uses SHA256 hash as filename (like git objects)
-   - Lockfile maps name → hash, cache maps hash → content
-   - No naming conflicts, trivial deduplication
-
-10. **Whole file is content** - No frontmatter parsing at fetch/lock time
-    - Entire file (including any YAML frontmatter) is hashed and cached as-is
-    - `PromptMetadata` extraction deferred to post-MVP
-
-11. **Upstream sources stubbed for MVP** - Non-local sources error with clear message
-    - `ClaudeMarketplaceFetcher` is on the roadmap but not initial implementation
+12. **Upstream sources stubbed for MVP** - `claude-marketplace` registry type returns clear error
+    - `ClaudeMarketplaceFetcher` is on the roadmap but stubbed initially
 
 ### Open Questions
 
 Need to resolve during implementation:
 
-1. **GitHub Repository Structure** - What's the actual repo URL and structure for Claude prompts?
-2. **Error Handling** - How to handle network failures, missing files, malformed YAML?
+1. **Error Handling** - How to handle network failures, missing files, malformed YAML?
+
+### Future: AI-Assisted Transformation
+
+Post-MVP, we may need AI to adapt prompts between platform formats. If added:
+
+- Transform once during `lock`, not during `build`
+- Cache the transformed output alongside the original
+- `build` always uses cached transforms — never calls an LLM
+- Lock file records both original and transformed hashes
 
 ## Dependencies
 
@@ -563,56 +652,9 @@ Need to resolve during implementation:
 - `typer` - CLI framework
 - `pyyaml` - YAML parsing
 - `pydantic` - Data validation (for config schemas)
-- `httpx` - HTTP client (if fetching from web)
+- `httpx` - HTTP client (for fetching from registries)
 
 ### Development
 - `pytest` - Testing framework
 - `ruff` - Linter and formatter
 - `pyright` - Type checker
-
-## Cross-Platform Contracts
-
-While promptkit is Python-only (no Swift), we still benefit from defining contracts:
-
-### Prompt Schema
-
-Prompts use **Markdown with YAML frontmatter** format:
-
-```markdown
----
-name: code-reviewer
-description: Reviews code for bugs and style issues
-author: Anthropic
-version: 1.0.0
-artifact_type: skill  # skill, rule, agent, command, subagent
-platforms:
-  - cursor
-  - claude-code
----
-
-# Code Reviewer Prompt
-
-You are an expert code reviewer. Review the following code for:
-- Bugs and logic errors
-- Code style and best practices
-- Performance issues
-
-When you find issues, explain:
-1. What the problem is
-2. Why it's a problem
-3. How to fix it
-
-Be constructive and specific in your feedback.
-```
-
-**Key fields:**
-- `name` - Unique identifier for the prompt
-- `description` - Brief description (for display)
-- `author` - Prompt author/maintainer
-- `version` - Semantic version (for future version pinning)
-- `artifact_type` - Where to place it (skill, rule, agent, command, subagent)
-- `platforms` - Which platforms to generate for (cursor, claude-code)
-
-The content after `---` is the actual prompt text in Markdown.
-
-This ensures consistency and makes platform adapters simpler.

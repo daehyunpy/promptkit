@@ -17,11 +17,15 @@ class Prompt:
     A Prompt has identity (via its spec name), holds content fetched from a source,
     and knows which platforms it targets. All access to prompt data goes through
     this aggregate.
+
+    artifact_type is optional — it comes from the prompt's frontmatter and is
+    populated at build time, not at fetch/lock time.
     """
 
     spec: PromptSpec
     content: str
     metadata: PromptMetadata | None = field(default=None)
+    artifact_type: ArtifactType | None = field(default=None)
 
     @property
     def name(self) -> str:
@@ -30,10 +34,6 @@ class Prompt:
     @property
     def source(self) -> str:
         return self.spec.source
-
-    @property
-    def artifact_type(self) -> ArtifactType:
-        return self.spec.artifact_type
 
     @property
     def content_hash(self) -> str:

@@ -9,9 +9,9 @@ from promptkit.domain.prompt_spec import PromptSpec
 
 
 class PromptFetcher(Protocol):
-    """Protocol for fetching prompt content from a source.
+    """Protocol for fetching prompt content from a registry.
 
-    Implementations: LocalFileFetcher, ClaudeMarketplaceFetcher
+    Implementations: ClaudeMarketplaceFetcher (selected by registry type)
     """
 
     def fetch(self, spec: PromptSpec, /) -> Prompt:
