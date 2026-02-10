@@ -21,6 +21,10 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: integration tests that may use external resources",
+    "network: tests that require network access",
+]
 
 [tool.pyright]
 pythonVersion = "3.13"
