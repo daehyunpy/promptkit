@@ -5,10 +5,19 @@ from pathlib import Path
 import typer
 
 from promptkit.app.init import InitProject, InitProjectError
+from promptkit.app.lock import LockPrompts
+from promptkit.domain.errors import SyncError, ValidationError
+from promptkit.infra.config.lock_file import LockFile
+from promptkit.infra.config.yaml_loader import YamlLoader
 from promptkit.infra.config_serializer import serialize_config_to_yaml
+from promptkit.infra.fetchers.local_file_fetcher import LocalFileFetcher
 from promptkit.infra.file_system.local import FileSystem
+from promptkit.infra.storage.prompt_cache import PromptCache
 
 app = typer.Typer(help="Package manager for AI prompts")
+
+CACHE_DIR = ".promptkit/cache"
+PROMPTS_DIR = "prompts"
 
 SUCCESS_MESSAGE = """\
 ✓ Initialized promptkit project
@@ -37,6 +46,27 @@ def init() -> None:
         use_case.execute(Path.cwd())
         typer.echo(SUCCESS_MESSAGE)
     except InitProjectError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def lock() -> None:
+    """Fetch prompts and update lock file without generating artifacts."""
+    try:
+        cwd = Path.cwd()
+        fs = FileSystem()
+        use_case = LockPrompts(
+            file_system=fs,
+            yaml_loader=YamlLoader(),
+            lock_file=LockFile(),
+            prompt_cache=PromptCache(fs, cwd / CACHE_DIR),
+            local_fetcher=LocalFileFetcher(fs, cwd / PROMPTS_DIR),
+            fetchers={},
+        )
+        use_case.execute(cwd)
+        typer.echo("Locked promptkit.lock")
+    except (SyncError, ValidationError, FileNotFoundError) as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1)
 
