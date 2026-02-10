@@ -258,7 +258,7 @@ Artifacts are stored in `openspec/changes/` during development and moved to `ope
 - **Lock file format**: YAML (`promptkit.lock`)
 - **Prompt metadata**: YAML frontmatter (author, description) — optional, informational only
 - **Platform-specific mapping**: directory-based routing (source category dir → platform output dir), no artifact_type needed
-- **`.cursor/` and `.claude/` gitignored?**: Recommended to gitignore but user's choice
+- **`.cursor/` and `.claude/` gitignored?**: No — commit build artifacts for team collaboration. promptkit uses manifest-based cleanup to preserve non-promptkit files
 - **Frontmatter required?**: No — frontmatter is optional metadata (description, author)
 - **Frontmatter in build output?**: Stripped for platforms that don't need it; each builder decides
 - **Error handling**: Fail fast with clear messages, no retries for MVP
