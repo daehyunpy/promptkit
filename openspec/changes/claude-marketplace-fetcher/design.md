@@ -4,17 +4,19 @@
 
 Both known registries (`anthropics/claude-plugins-official` and `anthropics/skills`) are GitHub repos with a `.claude-plugin/marketplace.json` manifest. Plugins contain entire directories of files — not just `.md` prompts but also hooks, MCP configs, LSP configs, scripts, and support files. A plugin is the unit of distribution.
 
-The current domain model is built around `Prompt` (single markdown string) and `PromptFetcher` (returns `Prompt`). This doesn't fit the plugin model — we need a new domain concept for fetched plugin directories.
+The current domain model is built around `Prompt` (single markdown string in memory) and `PromptFetcher` (returns `Prompt`). This doesn't fit — both registry plugins AND local prompts can be multi-file directories with non-markdown content. The model needs to be unified around file trees on disk.
 
 ## Goals / Non-Goals
 
 **Goals:**
+- Unified model: both local and registry plugins are `Plugin` (file tree on disk)
 - Fetch entire plugin directories from GitHub-hosted Claude marketplace registries
-- Cache complete plugin directories keyed by commit SHA for reproducibility
+- Cache registry plugin directories keyed by commit SHA for reproducibility
 - Support both repo structures (plugins repo with relative paths, skills repo with `skills` array)
 - Handle all file types — `.md`, `.json`, scripts, configs — not just markdown
+- Local prompts can be multi-file directories (not just single `.md` files)
+- Single code path in `LockPrompts` and `BuildArtifacts` (no dual model)
 - Wire fetchers automatically from config registries in the CLI
-- Lock file records commit SHA per plugin for deterministic re-builds
 
 **Non-Goals:**
 - Supporting non-GitHub registries (e.g., GitLab, self-hosted) — MVP only targets GitHub
@@ -23,77 +25,97 @@ The current domain model is built around `Prompt` (single markdown string) and `
 - Authentication / private repos — public repos only for v1
 - Rate limiting or retry logic — fail fast per project coding disciplines
 - Transforming file content (rewriting `${CLAUDE_PLUGIN_ROOT}` paths, etc.) — builders just copy
+- Hard links or symlinks for build output — just copy files
 
 ## Decisions
 
-### 1. New `Plugin` domain value object (manifest, not content)
+### 1. Unified `Plugin` domain value object replaces `Prompt`
 
-**Rationale:** A plugin is a directory of files, not a single markdown string. The `Prompt` model doesn't fit. But we don't need to load all file contents into memory — the fetcher downloads files to a cache directory on disk, and the `Plugin` object is just a manifest: spec + commit SHA + list of relative file paths.
+**Rationale:** Both local and registry plugins are file trees on disk. A single `.md` file is just a degenerate case (a directory with one file). The `Prompt` model (content string in memory) doesn't fit multi-file plugins or non-markdown files. Unifying on `Plugin` eliminates the dual-model complexity.
 
 ```python
 @dataclass(frozen=True)
 class Plugin:
     spec: PromptSpec
-    commit_sha: str
-    files: tuple[str, ...]  # relative paths within plugin dir
+    files: tuple[str, ...]        # relative paths within source dir
+    source_dir: Path              # where files live on disk
+    commit_sha: str | None = None # only for registry plugins
 ```
 
-`Prompt` stays for local prompts (which genuinely are single `.md` files with content in memory).
+- `files`: relative paths like `("agents/reviewer.md", "hooks/hooks.json")`
+- `source_dir`: for local → `prompts/{name}/` or `prompts/`. For registry → `.promptkit/cache/plugins/{reg}/{name}/{sha}/`
+- `commit_sha`: set for registry plugins, `None` for local
 
-### 2. New `PluginFetcher` protocol separate from `PromptFetcher`
+### 2. `PluginFetcher` protocol replaces `PromptFetcher`
 
-**Rationale:** `PromptFetcher.fetch(spec) → Prompt` is the wrong abstraction for plugins. Instead of stretching it, introduce `PluginFetcher.fetch(spec, cache_dir) → Plugin`. The fetcher downloads files to `cache_dir` and returns a manifest.
+**Rationale:** `PromptFetcher.fetch(spec) → Prompt` is the wrong abstraction. The new protocol:
 
-The previous design changed `PromptFetcher.fetch()` to return `list[Prompt]` — this is reverted. `PromptFetcher` remains for local prompts. `PluginFetcher` is the new protocol for remote registries.
+```python
+class PluginFetcher(Protocol):
+    def fetch(self, spec: PromptSpec, cache_dir: Path, /) -> Plugin: ...
+```
 
-**Alternative considered:** Keep single `PromptFetcher` with `list[Prompt]` return — rejected because it forces loading all file content into memory and doesn't model non-markdown files.
+Both `LocalPluginFetcher` and `ClaudeMarketplaceFetcher` implement this. `PromptFetcher` is removed entirely.
 
-### 3. Directory-based `PluginCache` keyed by commit SHA
+### 3. `LocalFileFetcher` → `LocalPluginFetcher` with multi-file support
 
-**Rationale:** The current `PromptCache` is content-addressable (SHA256 of content string, flat file storage). This doesn't work for multi-file plugin directories. Instead:
+**Rationale:** Local prompts can be directories with mixed file types, not just single `.md` files. The updated fetcher:
+
+- `discover()`: scans `prompts/` and returns one `PromptSpec` per top-level entry (file or directory)
+  - `prompts/my-rule.md` → `PromptSpec(source="local/my-rule")` (single file)
+  - `prompts/my-skill/` → `PromptSpec(source="local/my-skill")` (directory with SKILL.md, scripts, etc.)
+- `fetch(spec, cache_dir)`: reads from `prompts/`, returns `Plugin(spec, files, source_dir)`
+  - `source_dir` points to `prompts/` (local files stay in place, not copied to cache)
+  - `files` lists all files for that plugin, relative to `source_dir`
+
+### 4. `PluginCache` for registry plugins only
+
+**Rationale:** Registry plugins need a download cache — they come from GitHub and must be stored locally. Local plugins don't need a cache — they already live in `prompts/`.
 
 ```
 .promptkit/cache/
-├── plugins/                           # Remote plugin cache
-│   └── {registry}/{plugin}/{sha}/     # One dir per plugin version
-│       ├── agents/code-reviewer.md
-│       ├── commands/feature-dev.md
-│       ├── hooks/hooks.json
-│       └── scripts/deploy.sh
-└── sha256-*.md                        # Legacy content-addressable (local prompts)
+└── plugins/                           # Registry plugin cache only
+    └── {registry}/{plugin}/{sha}/     # One dir per plugin version
+        ├── agents/code-reviewer.md
+        ├── commands/feature-dev.md
+        ├── hooks/hooks.json
+        └── scripts/deploy.sh
 ```
 
-Cache key is `{registry_name}/{plugin_name}/{commit_sha}`. The commit SHA comes from the GitHub API (latest commit on default branch). The lock file records this SHA for reproducibility — `promptkit lock` only re-downloads when the SHA changes.
+Cache key is `{registry_name}/{plugin_name}/{commit_sha}`. The commit SHA comes from the GitHub API. The lock file records this SHA for reproducibility — `promptkit lock` only re-downloads when the SHA changes.
 
-### 4. `LockEntry` gains optional `commit_sha` field; `content_hash` stays `str`
+The old content-addressable `PromptCache` (`sha256-*.md` flat files) is removed.
 
-**Rationale:** Remote plugins are versioned by commit SHA, not content hash. The lock file needs to record this for reproducibility. Local prompts continue using `content_hash`.
+### 5. `LockEntry` gains optional `commit_sha` field; `content_hash` stays `str`
 
-For registry plugins, `content_hash` is set to `""` (empty string). This avoids a type change to `str | None` which would break all downstream consumers. The `commit_sha` field is the discriminator — if it's set, this is a registry plugin; if `None`, it's a local prompt.
+**Rationale:** Registry plugins are versioned by commit SHA, not content hash. The lock file needs to record this for reproducibility. Local plugins continue using `content_hash`.
+
+For registry plugins, `content_hash` is set to `""` (empty string). This avoids a type change to `str | None` which would break all downstream consumers. The `commit_sha` field is the discriminator — if it's set, this is a registry plugin; if `None`, it's a local plugin.
 
 ```python
 @dataclass(frozen=True)
 class LockEntry:
     name: str
     source: str
-    content_hash: str           # SHA256 for local, "" for registry plugins
+    content_hash: str              # SHA256 for local, "" for registry plugins
     fetched_at: datetime
     commit_sha: str | None = None  # Only for registry plugins
 ```
 
-This is backward-compatible — existing lock files without `commit_sha` still parse correctly.
+### 6. One lock entry per plugin (not per file)
 
-### 5. One lock entry per plugin (not per file)
+**Rationale:** One lock entry per `PromptSpec` in config. The lock entry records the plugin name, source, commit SHA (if registry), content hash (if local), and timestamp. Individual files are tracked implicitly via the cached directory or the local `prompts/` structure.
 
-**Rationale:** The previous design created one lock entry per `.md` file in a plugin (e.g., `feature-dev` → 4 entries). With the new model, one lock entry per `PromptSpec` in config. The lock entry records the plugin name, source, commit SHA, and timestamp. Individual files are tracked implicitly via the cached directory.
+### 7. Builders copy file trees from source directories
 
-### 6. Builders copy from plugin cache directory
+**Rationale:** At build time, builders resolve the source directory for each lock entry and copy the file tree to the platform output directory. Directory mapping applies (e.g., `skills/` → `skills-cursor/` for Cursor). Files are just copied — no hard links, no symlinks, no content transformation.
 
-**Rationale:** At build time, builders read files from the plugin cache directory (not from `Prompt` objects in memory). The builder walks the cached plugin directory and copies files to the platform output directory, applying directory structure mapping (e.g., `skills/` → `skills-cursor/` for Cursor).
+For local plugins: source is `prompts/`.
+For registry plugins: source is `.promptkit/cache/plugins/{registry}/{plugin}/{sha}/`.
 
-For local prompts, the existing `Prompt`-based build path is unchanged.
+This is a single code path — builders don't need to know whether the source is local or remote.
 
-### 7. GitHub Contents API + `download_url` for file fetching
+### 8. GitHub Contents API + `download_url` for file fetching
 
 **Rationale:** The Contents API (`api.github.com/repos/{owner}/{repo}/contents/{path}`) returns directory listings with `download_url` fields for each file. We use it to:
 1. Fetch `marketplace.json` to find the plugin entry
@@ -101,21 +123,21 @@ For local prompts, the existing `Prompt`-based build path is unchanged.
 3. List the plugin directory recursively
 4. Download each file via its `download_url`
 
-### 8. Skills repo `skills` array handling
+### 9. Skills repo `skills` array handling
 
 **Rationale:** The skills repo uses `source: "./"` (repo root) with a `skills` array listing explicit skill paths. The fetcher detects the `skills` array in the marketplace entry and fetches each listed skill directory instead of walking the `source` path.
 
-### 9. Skip external git URL sources for MVP
+### 10. Skip external git URL sources for MVP
 
-**Rationale:** Plugins like `atlassian`, `figma`, `vercel` use `source: {source: "url", url: "https://...git"}`. These point to entirely different repos. Handling them requires git clone or a different fetch strategy. Deferred to post-MVP. The fetcher logs a warning and skips these entries.
+**Rationale:** Plugins like `atlassian`, `figma`, `vercel` use `source: {source: "url", url: "https://...git"}`. These point to entirely different repos. Handling them requires git clone or a different fetch strategy. Deferred to post-MVP. The fetcher raises a `SyncError` for these entries.
 
-### 10. Injectable `httpx.Client` for testability
+### 11. Injectable `httpx.Client` for testability
 
 **Rationale:** The fetcher accepts an optional `httpx.Client` in the constructor. Production code uses the default (creates its own client). Tests inject a mock/fake client.
 
-### 11. CLI wiring: `_make_fetchers()` helper reads config registries
+### 12. CLI wiring: `_make_fetchers()` helper reads config registries
 
-**Rationale:** The CLI needs to load `promptkit.yaml` to discover registries before creating the `LockPrompts` use case. A `_make_fetchers(registries)` helper maps each `CLAUDE_MARKETPLACE` registry to a `ClaudeMarketplaceFetcher(registry.url)`.
+**Rationale:** The CLI needs to load `promptkit.yaml` to discover registries before creating the `LockPrompts` use case. A `_make_fetchers(registries)` helper maps each `CLAUDE_MARKETPLACE` registry to a `ClaudeMarketplaceFetcher(registry.url)`. Local fetcher is always created.
 
 ## Data Flow
 
@@ -124,29 +146,38 @@ For local prompts, the existing `Prompt`-based build path is unchanged.
 ```
 promptkit.yaml → registries + prompt specs
     ↓
-For each remote spec:
-    marketplace.json → find plugin entry → resolve source path
-    GitHub API → get latest commit SHA for default branch
-    If SHA matches lock → skip (already cached)
-    Otherwise → list plugin dir → download all files → write to cache
-    Return Plugin(spec, commit_sha, files)
+For each registry spec:
+    PluginFetcher (ClaudeMarketplaceFetcher):
+      marketplace.json → find plugin entry → resolve source path
+      GitHub API → get latest commit SHA
+      If SHA matches existing lock entry → skip (already cached)
+      Otherwise → list plugin dir → download all files → write to PluginCache
+      Return Plugin(spec, files, source_dir=cache_dir, commit_sha=sha)
     Write LockEntry(name, source, content_hash="", fetched_at, commit_sha=sha)
-For each local spec:
-    LocalFileFetcher → Prompt → cache content → LockEntry (unchanged)
-Write promptkit.lock
+
+For each local spec (discovered from prompts/):
+    PluginFetcher (LocalPluginFetcher):
+      Scan prompts/ → list files for this plugin
+      Return Plugin(spec, files, source_dir=prompts/, commit_sha=None)
+    Write LockEntry(name, source, content_hash=hash_of_files, fetched_at, commit_sha=None)
+
+Write promptkit.lock (sorted by name)
 ```
 
-### Build (cache → artifacts)
+### Build (source → artifacts)
 
 ```
 promptkit.lock → lock entries
 promptkit.yaml → platform configs
     ↓
 For each lock entry:
-    If local → read from prompts/ → Prompt → builder.build()
-    If remote → resolve cache dir from commit_sha → copy files to output
-        Apply directory mapping (skills/ → skills-cursor/ for Cursor)
-        Copy all non-md files as-is
+    Resolve source dir:
+      If commit_sha → .promptkit/cache/plugins/{registry}/{plugin}/{sha}/
+      If no commit_sha → prompts/ (local)
+    For each platform:
+      Copy file tree from source_dir to platform output_dir
+      Apply directory mapping (skills/ → skills-cursor/ for Cursor)
+      Skip unsupported categories per platform (e.g., Cursor has no agents, commands, hooks)
 ```
 
 ## Risks / Trade-offs
@@ -157,6 +188,6 @@ For each lock entry:
 
 **Large plugin directories** → Some plugins may have many files. The fetcher downloads all of them. Acceptable for MVP — plugins are typically small (< 50 files). Could add file-count limits later.
 
-**Dual model complexity** → Local prompts use `Prompt` (content in memory), remote plugins use `Plugin` (files on disk). This creates two code paths in `LockPrompts` and `BuildArtifacts`. Acceptable trade-off — the models genuinely differ.
+**Breaking change to existing tests** → Replacing `Prompt` with `Plugin` and `PromptFetcher` with `PluginFetcher` requires updating all existing tests. This is the right trade-off — simpler unified model is worth the migration cost.
 
 **External plugins deferred** → Users who want `atlassian` or `figma` plugins get a clear error message. Post-MVP: add git clone support for external sources.

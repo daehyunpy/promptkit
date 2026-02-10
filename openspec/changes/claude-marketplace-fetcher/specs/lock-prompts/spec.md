@@ -1,33 +1,43 @@
 ## MODIFIED Requirements
 
-### Requirement: LockEntry supports commit SHA for remote plugins
-The `LockEntry` value object SHALL have an optional `commit_sha` field. Remote plugins use commit SHA for versioning. Local prompts continue using `content_hash` only.
+### Requirement: LockEntry supports commit SHA for registry plugins
+The `LockEntry` value object SHALL have an optional `commit_sha` field. Registry plugins use commit SHA for versioning. Local plugins continue using `content_hash` only.
 
-#### Scenario: Lock entry for remote plugin
-- **WHEN** a `LockEntry` is created for a remote plugin
+#### Scenario: Lock entry for registry plugin
+- **WHEN** a `LockEntry` is created for a registry plugin
 - **THEN** `commit_sha` is set to the GitHub commit SHA string
 - **AND** `content_hash` is `""` (empty string — registry plugins use commit SHA, not content hash)
 
-#### Scenario: Lock entry for local prompt
-- **WHEN** a `LockEntry` is created for a local prompt
+#### Scenario: Lock entry for local plugin
+- **WHEN** a `LockEntry` is created for a local plugin
 - **THEN** `commit_sha` is `None`
-- **AND** `content_hash` is the SHA256 of the prompt content
+- **AND** `content_hash` is the SHA256 hash of the plugin's file contents
 
 #### Scenario: Backward compatibility
 - **WHEN** a lock file without `commit_sha` fields is deserialized
 - **THEN** all entries parse correctly with `commit_sha` as `None`
 
-### Requirement: LockPrompts fetches and locks remote plugins
-The `LockPrompts` use case SHALL fetch each remote plugin declared in `promptkit.yaml` via `PluginFetcher`, download to cache, and record one `LockEntry` per plugin.
+### Requirement: LockPrompts uses single code path for all plugins
+The `LockPrompts` use case SHALL use a single code path for both local and registry plugins. Every spec is fetched via `PluginFetcher.fetch()`, producing a `Plugin` manifest and one `LockEntry`.
 
-#### Scenario: Lock a single remote plugin
-- **WHEN** `execute()` is called with a config containing one remote spec `registry/plugin-name`
+#### Scenario: Lock a registry plugin
+- **WHEN** `execute()` is called with a config containing one registry spec `registry/plugin-name`
 - **AND** a plugin fetcher for that registry is provided
 - **THEN** the fetcher downloads the plugin directory to cache
-- **AND** one `LockEntry` is written with the plugin name, source, commit SHA, and timestamp
+- **AND** one `LockEntry` is written with the plugin name, source, commit SHA, `content_hash=""`, and timestamp
 
-#### Scenario: Lock multiple remote plugins from different registries
-- **WHEN** `execute()` is called with multiple remote specs from different registries
+#### Scenario: Lock a local plugin (single .md file)
+- **WHEN** `execute()` is called and `prompts/` contains `my-rule.md`
+- **THEN** the local plugin fetcher returns a `Plugin` manifest
+- **AND** a `LockEntry` with source `local/my-rule`, content hash, and `commit_sha=None` is written
+
+#### Scenario: Lock a local plugin (directory with mixed files)
+- **WHEN** `execute()` is called and `prompts/my-skill/` contains `SKILL.md` and `scripts/check.sh`
+- **THEN** the local plugin fetcher returns a `Plugin` manifest with both files listed
+- **AND** a `LockEntry` with source `local/my-skill`, content hash, and `commit_sha=None` is written
+
+#### Scenario: Lock multiple plugins from different registries
+- **WHEN** `execute()` is called with multiple specs from different registries
 - **THEN** each spec is fetched from its respective registry's fetcher
 - **AND** one lock entry per spec is recorded
 
@@ -40,29 +50,31 @@ The `LockPrompts` use case SHALL fetch each remote plugin declared in `promptkit
 - **THEN** the fetcher is still called (to get the latest SHA) but the download is skipped if SHA matches
 - **AND** the existing lock entry timestamp is preserved
 
-### Requirement: LockPrompts discovers and locks local prompts (unchanged)
-The `LockPrompts` use case SHALL continue to discover all prompts in `prompts/`, fetch their content via `LocalFileFetcher`, cache it, and record lock entries with `local/<name>` source.
-
-#### Scenario: Lock local prompts
-- **WHEN** `execute()` is called and `prompts/` contains `my-rule.md`
-- **THEN** the local prompt is fetched, cached, and a `LockEntry` with source `local/my-rule` and content hash is written
-
-#### Scenario: No local prompts
+#### Scenario: No local plugins
 - **WHEN** `execute()` is called and `prompts/` is empty
 - **THEN** no local lock entries are created (not an error)
 
-### Requirement: BuildArtifacts reads remote plugins from cache directory
-The `BuildArtifacts` use case SHALL read remote plugin files from the plugin cache directory (resolved via `commit_sha` from lock entry) and copy them to platform output directories.
+### Requirement: BuildArtifacts uses single code path for all plugins
+The `BuildArtifacts` use case SHALL resolve the source directory for each lock entry and copy file trees to platform output directories.
 
-#### Scenario: Build with remote plugin
-- **WHEN** `execute()` is called and the lock file contains a remote plugin entry with `commit_sha`
-- **THEN** the builder reads files from `.promptkit/cache/plugins/{registry}/{plugin}/{sha}/`
-- **AND** copies them to the platform output directory with appropriate directory mapping
+#### Scenario: Build with registry plugin
+- **WHEN** `execute()` is called and the lock file contains a registry plugin entry with `commit_sha`
+- **THEN** the source dir is resolved to `.promptkit/cache/plugins/{registry}/{plugin}/{sha}/`
+- **AND** files are copied to the platform output directory with appropriate directory mapping
 
-#### Scenario: Build with local prompt (unchanged)
-- **WHEN** the lock file contains a local prompt entry (no `commit_sha`)
-- **THEN** the existing `Prompt`-based build path is used (read from `prompts/`, build from content)
+#### Scenario: Build with local plugin
+- **WHEN** the lock file contains a local plugin entry (no `commit_sha`)
+- **THEN** the source dir is resolved to `prompts/`
+- **AND** files are copied to the platform output directory with appropriate directory mapping
 
 #### Scenario: Plugin cache missing
 - **WHEN** the lock file has a `commit_sha` but the cache directory doesn't exist
 - **THEN** a `BuildError` is raised suggesting `promptkit lock` to re-fetch
+
+### REMOVED Requirements
+
+### Requirement: Prompt aggregate and PromptFetcher protocol
+The `Prompt` aggregate (content string in memory) and `PromptFetcher` protocol are removed. Replaced by `Plugin` (file tree on disk) and `PluginFetcher` protocol.
+
+### Requirement: PromptCache (content-addressable)
+The `PromptCache` (flat `sha256-*.md` files) is removed. Registry plugins use `PluginCache` (directory-based). Local plugins read from `prompts/` directly.
