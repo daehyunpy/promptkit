@@ -7,7 +7,7 @@ Additionally, there is no guidance or mechanism protecting non-promptkit files i
 ## What Changes
 
 - **Builders clean only promptkit-managed files** instead of wiping the entire output directory. Each builder tracks which subdirectories it manages (based on category routing) and only removes files within those scoped paths, preserving unrelated files like `settings.json`.
-- **Builders write a manifest** (`.promptkit-managed`) listing generated file paths, so subsequent builds know exactly which files to clean without touching others.
+- **Builders write a manifest** in `.promptkit/managed/` (e.g., `claude.txt`, `cursor.txt`) listing generated file paths, so subsequent builds know exactly which files to clean without touching others. Manifests stay out of platform output directories.
 - **`.gitignore` template updated** — `promptkit init` no longer suggests gitignoring `.cursor/` and `.claude/`, since committing build artifacts is the intended workflow for team collaboration.
 
 ## Capabilities
@@ -16,7 +16,7 @@ Additionally, there is no guidance or mechanism protecting non-promptkit files i
 - `safe-build-output`: Builders perform scoped cleanup using a manifest of previously generated files instead of wiping the entire output directory
 
 ### Modified Capabilities
-- `build-artifacts`: Build use case reads/writes a `.promptkit-managed` manifest per output directory to track generated files
+- `build-artifacts`: Build use case coordinates manifest read/write in `.promptkit/managed/` to track generated files per platform
 - `claude-builder`: Scoped cleanup — removes only previously managed files, then writes new artifacts
 - `cursor-builder`: Scoped cleanup — removes only previously managed files, then writes new artifacts
 
