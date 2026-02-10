@@ -88,7 +88,7 @@ Manifest (promptkit.yaml)  →  Lockfile (promptkit.lock)  →  Artifacts (.curs
 - ✅ `promptkit.lock` - version locks
 - ✅ `prompts/` - local/custom prompts
 - ❌ `.promptkit/cache/` - cached remote prompts (reproducible via lock file)
-- ⚠️  `.cursor/`, `.claude/` - generated artifacts (recommended to gitignore, but user's choice)
+- ✅ `.cursor/`, `.claude/` - generated artifacts (commit for team collaboration; promptkit uses manifest-based cleanup to preserve non-promptkit files)
 
 ## Configuration Schema
 
