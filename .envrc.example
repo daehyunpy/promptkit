@@ -1,4 +1,6 @@
 # direnv configuration
 # Copy this to .envrc and run: direnv allow
 
-dotenv
+source .venv/bin/activate
+PATH_add node_modules/.bin
+dotenv_if_exists

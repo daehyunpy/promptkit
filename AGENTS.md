@@ -38,37 +38,59 @@ Read both before making changes.
 ## Development Setup
 
 ```bash
-# Requires Python 3.13+ and uv package manager
-# Install uv: https://docs.astral.sh/uv/
+# Prerequisites
+# - Python 3.13+: https://www.python.org/downloads/
+# - uv: https://docs.astral.sh/uv/
+# - bun: https://bun.sh/
+# - direnv: https://direnv.net/ (optional but recommended)
 
-# Create virtual environment and install dependencies (when pyproject.toml exists)
+# 1. Install Python dependencies
 uv sync                      # Install all dependencies including dev
 
-# OpenSpec CLI (spec-driven development tool)
-# Requires bun: https://bun.sh/
-bun install                  # Install openspec CLI
+# 2. Install OpenSpec CLI (spec-driven development tool)
+bun install                  # Installs openspec CLI to node_modules/.bin
 
-# (Optional) Environment variables - if needed
-cp .env.example .env         # Create .env file
-direnv allow                 # Load environment variables (requires direnv)
+# 3. Setup environment (recommended)
+cp .envrc.example .envrc     # Copy environment template
+cp .env.example .env         # Copy config template (if needed)
+
+# If direnv hook is set up in your shell (~/.bashrc or ~/.zshrc):
+#   eval "$(direnv hook bash)"  # or zsh, fish, etc.
+# Then direnv will auto-prompt, or run:
+direnv allow                 # Explicitly allow .envrc to load
+
+# If direnv hook is NOT set up, manually load for current shell:
+eval "$(direnv export bash)" # Load .envrc (bash/zsh/fish)
+
+# What .envrc does:
+# - Activates Python virtual environment (.venv)
+# - Adds node_modules/.bin to PATH (for openspec CLI)
+# - Loads variables from .env file
+
+# Alternative: Manual activation (if not using direnv at all)
+source .venv/bin/activate
+export PATH="$PWD/node_modules/.bin:$PATH"
 ```
 
 ## Common Commands
 
 ```bash
+# Assumes .envrc is active (venv activated, PATH configured)
+# If direnv isn't working, prefix commands with `uv run`
+
 # Run tests (TDD workflow)
-uv run pytest -x             # Run tests, stop on first failure
-uv run pytest -v             # Verbose output
-uv run pytest tests/domain/  # Run specific test directory
-uv run pytest -k test_name   # Run tests matching name pattern
+pytest -x                    # Run tests, stop on first failure
+pytest -v                    # Verbose output
+pytest tests/domain/         # Run specific test directory
+pytest -k test_name          # Run tests matching name pattern
 
 # Type checking
-uv run pyright               # Type check all code
+pyright                      # Type check all code
 
 # Linting and formatting
-uv run ruff check .          # Check for issues
-uv run ruff format .         # Auto-format code
-uv run ruff check --fix .    # Auto-fix issues
+ruff check .                 # Check for issues
+ruff format .                # Auto-format code
+ruff check --fix .           # Auto-fix issues
 ```
 
 ## Project Structure
