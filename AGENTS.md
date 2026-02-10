@@ -15,15 +15,13 @@ Read both before making changes.
 
 ## Current State
 
-**Phases 1-5 complete.** Domain model, config loading, and lock command implemented. 161 tests passing.
+**All MVP phases (1-8) complete.** 230 tests passing.
 
 **Completed:**
 - Phase 1-2: Project scaffold + `promptkit init` command
 - Phase 3: Domain model (Prompt, PromptSpec, LockEntry, Registry, PlatformConfig, PlatformTarget, errors, protocols)
 - Phase 4: Config loading (YamlLoader, LockFile reader/writer)
 - Phase 5: Lock command (LocalFileFetcher, PromptCache, LockPrompts use case, `promptkit lock` CLI)
-
-**Next Steps:**
 - Phase 6: Build command (CursorBuilder, ClaudeBuilder, BuildArtifacts use case)
 - Phase 7: Sync command (compose lock + build)
 - Phase 8: Validate command
@@ -45,6 +43,10 @@ Read both before making changes.
 
 # Create virtual environment and install dependencies (when pyproject.toml exists)
 uv sync                      # Install all dependencies including dev
+
+# OpenSpec CLI (spec-driven development tool)
+# Requires bun: https://bun.sh/
+bun install                  # Install openspec CLI
 
 # (Optional) Environment variables - if needed
 cp .env.example .env         # Create .env file

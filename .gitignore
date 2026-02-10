@@ -15,6 +15,9 @@ venv/
 .env
 .envrc
 
+# Node (openspec CLI)
+node_modules/
+
 # macOS
 .DS_Store
 
