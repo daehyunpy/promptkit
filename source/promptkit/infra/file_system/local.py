@@ -26,3 +26,13 @@ class FileSystem:
         """Append content to existing file."""
         with path.open("a") as f:
             f.write(content)
+
+    def read_file(self, path: Path, /) -> str:
+        """Read file content as string."""
+        return path.read_text()
+
+    def list_directory(self, path: Path, /) -> list[Path]:
+        """List immediate children of a directory."""
+        if not path.is_dir():
+            return []
+        return list(path.iterdir())

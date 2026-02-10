@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from promptkit.infra.file_system.local import FileSystem
 
 
@@ -75,3 +77,42 @@ def test_append_to_file_appends_content(tmp_path: Path) -> None:
     fs.append_to_file(target, "second\n")
 
     assert target.read_text() == "first\nsecond\n"
+
+
+def test_read_file_returns_content(tmp_path: Path) -> None:
+    """read_file should return file content as string."""
+    fs = FileSystem()
+    target = tmp_path / "read.txt"
+    target.write_text("hello world")
+
+    assert fs.read_file(target) == "hello world"
+
+
+def test_read_file_raises_for_missing_file(tmp_path: Path) -> None:
+    """read_file should raise FileNotFoundError for missing files."""
+    fs = FileSystem()
+    target = tmp_path / "missing.txt"
+
+    with pytest.raises(FileNotFoundError):
+        fs.read_file(target)
+
+
+def test_list_directory_returns_children(tmp_path: Path) -> None:
+    """list_directory should return immediate children of a directory."""
+    fs = FileSystem()
+    (tmp_path / "file1.txt").write_text("a")
+    (tmp_path / "file2.txt").write_text("b")
+    (tmp_path / "subdir").mkdir()
+
+    result = fs.list_directory(tmp_path)
+
+    names = sorted(p.name for p in result)
+    assert names == ["file1.txt", "file2.txt", "subdir"]
+
+
+def test_list_directory_returns_empty_for_missing_dir(tmp_path: Path) -> None:
+    """list_directory should return empty list for nonexistent directory."""
+    fs = FileSystem()
+    target = tmp_path / "nonexistent"
+
+    assert fs.list_directory(target) == []

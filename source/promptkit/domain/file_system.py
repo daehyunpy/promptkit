@@ -26,3 +26,18 @@ class FileSystem(Protocol):
     def append_to_file(self, path: Path, content: str, /) -> None:
         """Append content to existing file."""
         ...
+
+    def read_file(self, path: Path, /) -> str:
+        """Read file content as string.
+
+        Raises:
+            FileNotFoundError: If file does not exist.
+        """
+        ...
+
+    def list_directory(self, path: Path, /) -> list[Path]:
+        """List immediate children of a directory.
+
+        Returns an empty list if the directory does not exist.
+        """
+        ...
