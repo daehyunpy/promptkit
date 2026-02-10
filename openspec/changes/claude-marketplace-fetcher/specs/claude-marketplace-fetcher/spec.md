@@ -18,10 +18,10 @@ The `Plugin` value object SHALL hold a spec, file list, source directory, and op
 - **AND** `plugin.commit_sha` is `None`
 
 ### Requirement: PluginFetcher protocol for fetching plugins
-The `PluginFetcher` protocol SHALL define `fetch(spec, cache_dir) -> Plugin` which resolves plugin files and returns a `Plugin` manifest. Both `LocalPluginFetcher` and `ClaudeMarketplaceFetcher` implement this.
+The `PluginFetcher` protocol SHALL define `fetch(spec) -> Plugin` which resolves plugin files and returns a `Plugin` manifest. `cache_dir` and other configuration are injected at construction time. Both `LocalPluginFetcher` and `ClaudeMarketplaceFetcher` implement this.
 
 #### Scenario: Fetcher returns plugin manifest
-- **WHEN** `fetch(spec, cache_dir)` is called
+- **WHEN** `fetch(spec)` is called
 - **THEN** a `Plugin` manifest is returned with the spec, file list, source dir, and optional commit SHA
 
 ### Requirement: LocalPluginFetcher discovers and fetches local plugins
@@ -36,11 +36,11 @@ The `LocalPluginFetcher` SHALL scan `prompts/` for local plugins (single `.md` f
 - **THEN** a `PromptSpec(source="local/my-skill")` is returned
 
 #### Scenario: Fetch single .md file
-- **WHEN** `fetch(spec, cache_dir)` is called with `spec.source = "local/my-rule"`
+- **WHEN** `fetch(spec)` is called with `spec.source = "local/my-rule"`
 - **THEN** `Plugin(spec, files=("my-rule.md",), source_dir=prompts/)` is returned
 
 #### Scenario: Fetch directory plugin
-- **WHEN** `fetch(spec, cache_dir)` is called with `spec.source = "local/my-skill"`
+- **WHEN** `fetch(spec)` is called with `spec.source = "local/my-skill"`
 - **AND** `prompts/my-skill/` contains `SKILL.md` and `scripts/check.sh`
 - **THEN** `Plugin(spec, files=("my-skill/SKILL.md", "my-skill/scripts/check.sh"), source_dir=prompts/)` is returned
 
@@ -52,17 +52,17 @@ The `LocalPluginFetcher` SHALL scan `prompts/` for local plugins (single `.md` f
 The `ClaudeMarketplaceFetcher` SHALL fetch `.claude-plugin/marketplace.json` from the registry repository and use it to resolve the plugin's source path within the repo.
 
 #### Scenario: Plugin found in marketplace.json with relative path source
-- **WHEN** `fetch(spec, cache_dir)` is called with `spec.prompt_name` equal to `"code-simplifier"`
+- **WHEN** `fetch(spec)` is called with `spec.prompt_name` equal to `"code-simplifier"`
 - **AND** `marketplace.json` contains an entry with `"name": "code-simplifier"` and `"source": "./plugins/code-simplifier"`
 - **THEN** the fetcher resolves the plugin source path to `plugins/code-simplifier`
 
 #### Scenario: Plugin not found in marketplace.json
-- **WHEN** `fetch(spec, cache_dir)` is called with a prompt name that does not match any entry
+- **WHEN** `fetch(spec)` is called with a prompt name that does not match any entry
 - **THEN** a `SyncError` is raised with a message indicating the plugin was not found
 
 #### Scenario: Plugin has external git URL source (skipped for MVP)
 - **WHEN** `marketplace.json` contains an entry with `"source": {"source": "url", "url": "https://..."}`
-- **AND** `fetch(spec, cache_dir)` is called for that plugin
+- **AND** `fetch(spec)` is called for that plugin
 - **THEN** a `SyncError` is raised indicating external sources are not yet supported
 
 #### Scenario: marketplace.json fetch fails

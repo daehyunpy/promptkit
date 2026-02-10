@@ -52,10 +52,14 @@ class Plugin:
 
 ```python
 class PluginFetcher(Protocol):
-    def fetch(self, spec: PromptSpec, cache_dir: Path, /) -> Plugin: ...
+    def fetch(self, spec: PromptSpec, /) -> Plugin: ...
 ```
 
-Both `LocalPluginFetcher` and `ClaudeMarketplaceFetcher` implement this. `PromptFetcher` is removed entirely.
+`cache_dir` is injected at construction time (configuration), not passed per-call. Each fetcher is constructed with the paths it needs:
+- `ClaudeMarketplaceFetcher(registry_url, cache_dir, client=None)`
+- `LocalPluginFetcher(file_system, prompts_dir)` — no cache_dir needed, reads from `prompts/` directly
+
+Both implement the protocol. `PromptFetcher` is removed entirely.
 
 ### 3. `LocalFileFetcher` → `LocalPluginFetcher` with multi-file support
 
@@ -64,7 +68,7 @@ Both `LocalPluginFetcher` and `ClaudeMarketplaceFetcher` implement this. `Prompt
 - `discover()`: scans `prompts/` and returns one `PromptSpec` per top-level entry (file or directory)
   - `prompts/my-rule.md` → `PromptSpec(source="local/my-rule")` (single file)
   - `prompts/my-skill/` → `PromptSpec(source="local/my-skill")` (directory with SKILL.md, scripts, etc.)
-- `fetch(spec, cache_dir)`: reads from `prompts/`, returns `Plugin(spec, files, source_dir)`
+- `fetch(spec)`: reads from `prompts/`, returns `Plugin(spec, files, source_dir)`
   - `source_dir` points to `prompts/` (local files stay in place, not copied to cache)
   - `files` lists all files for that plugin, relative to `source_dir`
 
@@ -110,7 +114,7 @@ class LockEntry:
 
 **Rationale:** One lock entry per plugin (one per `PromptSpec` in config, one per discovered local plugin). The lock entry records the plugin name, source, commit SHA (if registry), content hash (if local), and timestamp. Individual files are tracked implicitly via the cached directory or the local `prompts/` structure.
 
-### 7. Builders copy entire file trees — no filtering
+### 8. Builders copy entire file trees — no filtering
 
 **Rationale:** At build time, builders resolve the source directory for each lock entry and copy the entire file tree to the platform output directory. No files are excluded (including `.claude-plugin/plugin.json`, `.mcp.json`, etc.) — if the platform can't use a file, it simply ignores it. This avoids maintaining an exclusion list. Directory mapping applies (e.g., `skills/` → `skills-cursor/` for Cursor). Files are just copied — no hard links, no symlinks, no content transformation.
 
@@ -119,11 +123,11 @@ For registry plugins: source is `.promptkit/cache/plugins/{registry}/{plugin}/{s
 
 This is a single code path — builders don't need to know whether the source is local or remote.
 
-### 8. Builder protocol receives `list[Plugin]`
+### 9. Builder protocol receives `list[Plugin]`
 
 **Rationale:** The `ArtifactBuilder.build()` method receives `list[Plugin]` and `output_dir`. Each `Plugin` has `source_dir` and `files`. The builder iterates plugins and copies from each `source_dir`. The builder already imports domain types (`PlatformTarget`), so depending on `Plugin` is fine.
 
-### 9. GitHub Contents API + `download_url` for file fetching
+### 10. GitHub Contents API + `download_url` for file fetching
 
 **Rationale:** The Contents API (`api.github.com/repos/{owner}/{repo}/contents/{path}`) returns directory listings with `download_url` fields for each file. We use it to:
 1. Fetch `marketplace.json` to find the plugin entry
@@ -131,19 +135,19 @@ This is a single code path — builders don't need to know whether the source is
 3. List the plugin directory recursively
 4. Download each file via its `download_url`
 
-### 10. Skills repo `skills` array handling
+### 11. Skills repo `skills` array handling
 
 **Rationale:** The skills repo uses `source: "./"` (repo root) with a `skills` array listing explicit skill paths. The fetcher detects the `skills` array in the marketplace entry and fetches each listed skill directory instead of walking the `source` path.
 
-### 11. Skip external git URL sources for MVP
+### 12. Skip external git URL sources for MVP
 
 **Rationale:** Plugins like `atlassian`, `figma`, `vercel` use `source: {source: "url", url: "https://...git"}`. These point to entirely different repos. Handling them requires git clone or a different fetch strategy. Deferred to post-MVP. The fetcher raises a `SyncError` for these entries.
 
-### 12. Injectable `httpx.Client` for testability
+### 13. Injectable `httpx.Client` for testability
 
 **Rationale:** The fetcher accepts an optional `httpx.Client` in the constructor. Production code uses the default (creates its own client). Tests inject a mock/fake client.
 
-### 13. CLI wiring: `_make_fetchers()` helper reads config registries
+### 14. CLI wiring: `_make_fetchers()` helper reads config registries
 
 **Rationale:** The CLI needs to load `promptkit.yaml` to discover registries before creating the `LockPrompts` use case. A `_make_fetchers(registries)` helper maps each `CLAUDE_MARKETPLACE` registry to a `ClaudeMarketplaceFetcher(registry.url)`. Local fetcher is always created.
 
@@ -155,22 +159,19 @@ This is a single code path — builders don't need to know whether the source is
 promptkit.yaml → registries + prompt specs
     ↓
 For each registry spec:
-    PluginFetcher (ClaudeMarketplaceFetcher):
-      marketplace.json → find plugin entry → resolve source path
-      GitHub API → get latest commit SHA
-      If SHA matches existing lock entry → skip (already cached)
-      Otherwise → list plugin dir → download all files → write to PluginCache
-      Return Plugin(spec, files, source_dir=cache_dir, commit_sha=sha)
-    Write LockEntry(name, source, content_hash="", fetched_at, commit_sha=sha)
+    fetcher.fetch(spec) → Plugin(spec, files, source_dir=cache_dir, commit_sha=sha)
+      (internally: marketplace.json → resolve path → check SHA → download to cache)
+    LockPrompts creates LockEntry(name, source, content_hash="", fetched_at, commit_sha=sha)
 
 For each local spec (discovered from prompts/):
-    PluginFetcher (LocalPluginFetcher):
-      Scan prompts/ → list files for this plugin
-      Return Plugin(spec, files, source_dir=prompts/, commit_sha=None)
-    Write LockEntry(name, source, content_hash=hash_of_files, fetched_at, commit_sha=None)
+    fetcher.fetch(spec) → Plugin(spec, files, source_dir=prompts/, commit_sha=None)
+    LockPrompts computes content_hash by reading files from plugin.source_dir
+    LockPrompts creates LockEntry(name, source, content_hash=hash, fetched_at, commit_sha=None)
 
 Write promptkit.lock (sorted by name)
 ```
+
+**Note:** `content_hash` is computed in `LockPrompts` (app layer), not in `Plugin` (domain). Plugin is a pure manifest — no file I/O, no hashing. The app layer reads files via `FileSystem` protocol to compute the hash.
 
 ### Build (source → artifacts)
 
@@ -183,9 +184,9 @@ For each lock entry:
       If commit_sha → .promptkit/cache/plugins/{registry}/{plugin}/{sha}/
       If no commit_sha → prompts/ (local)
     For each platform:
-      Copy file tree from source_dir to platform output_dir
+      Copy entire file tree from source_dir to platform output_dir
       Apply directory mapping (skills/ → skills-cursor/ for Cursor)
-      Skip unsupported categories per platform (e.g., Cursor has no agents, commands, hooks)
+      No file filtering — platforms ignore unknown files
 ```
 
 ## Risks / Trade-offs
