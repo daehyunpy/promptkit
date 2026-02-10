@@ -15,7 +15,7 @@ Read both before making changes.
 
 ## Current State
 
-**All MVP phases (1-8) complete.** 230 tests passing.
+**MVP phases 1-8 complete (local-only). Phase 9 (registry fetcher) in progress.** 243 tests passing.
 
 **Completed:**
 - Phase 1-2: Project scaffold + `promptkit init` command
@@ -25,6 +25,17 @@ Read both before making changes.
 - Phase 6: Build command (CursorBuilder, ClaudeBuilder, BuildArtifacts use case)
 - Phase 7: Sync command (compose lock + build)
 - Phase 8: Validate command
+
+**In Progress — Phase 9: Claude Marketplace Fetcher** (`openspec/changes/claude-marketplace-fetcher/`)
+- Unified `Plugin` model replaces `Prompt` — both local and registry plugins are file trees on disk
+- `PluginFetcher` protocol replaces `PromptFetcher` — single abstraction for local + registry
+- `ClaudeMarketplaceFetcher` — downloads full plugin directories from GitHub via Contents API
+- `PluginCache` — directory-based cache keyed by `{registry}/{plugin}/{commit_sha}/`
+- `LocalPluginFetcher` — replaces `LocalFileFetcher`, supports multi-file directories + non-md files
+- `LockEntry` gains `commit_sha` field for registry plugins
+- Builders copy file trees (not string content) with directory mapping
+- Removes: `Prompt`, `PromptFetcher`, `PromptCache`
+- See `openspec/changes/claude-marketplace-fetcher/tasks.md` for full task list (14 groups, ~70 subtasks)
 
 ## Tech Stack
 
@@ -98,38 +109,46 @@ ruff check --fix .           # Auto-fix issues
 ```
 promptkit/
 ├── docs/
-│   └── product_requirements.md    # Product requirements
+│   ├── product_requirements.md       # Product requirements
+│   ├── technical_design.md           # Architecture + schemas
+│   └── references/                   # Upstream specs (tracked with commit SHAs)
+│       ├── claude-marketplace-spec.md
+│       ├── claude-code-directory-spec.md
+│       └── cursor-directory-spec.md
 ├── source/
 │   └── promptkit/
 │       ├── __init__.py
-│       ├── cli.py                  # CLI entry point
-│       ├── domain/                 # Domain layer (pure business logic)
-│       │   ├── prompt.py           # Prompt aggregate root
-│       │   ├── prompt_spec.py      # PromptSpec value object
-│       │   ├── prompt_metadata.py  # PromptMetadata value object
-│       │   ├── lock_entry.py       # LockEntry value object
-│       │   ├── platform_target.py  # PlatformTarget enum
-│       │   ├── errors.py           # Domain errors
-│       │   └── protocols.py        # PromptFetcher, ArtifactBuilder protocols
-│       ├── app/                    # Application layer (use cases)
-│       │   ├── init.py             # Init use case
-│       │   ├── lock.py             # Lock use case (fetch + lock)
-│       │   ├── build.py            # Build use case (cache → artifacts)
-│       │   └── validate.py         # Validate use case
-│       └── infra/                  # Infrastructure layer (adapters)
-│           ├── config/             # Config loading
-│           ├── fetchers/           # Prompt fetchers
-│           ├── builders/           # Platform artifact builders
-│           └── storage/            # Cache management
-├── tests/                          # Tests mirror source/ structure
-├── pyproject.toml                  # Python project config
-├── uv.lock                         # Locked dependencies
-├── promptkit.yaml                  # Example/template config
+│       ├── cli.py                    # CLI entry point
+│       ├── domain/                   # Domain layer (pure business logic)
+│       │   ├── plugin.py            # Plugin value object (unified model)
+│       │   ├── prompt.py            # Prompt aggregate (being replaced by Plugin)
+│       │   ├── prompt_spec.py       # PromptSpec value object
+│       │   ├── lock_entry.py        # LockEntry value object (+commit_sha)
+│       │   ├── platform_target.py   # PlatformTarget enum
+│       │   ├── errors.py            # Domain errors
+│       │   └── protocols.py         # PluginFetcher, ArtifactBuilder protocols
+│       ├── app/                     # Application layer (use cases)
+│       │   ├── init.py              # Init use case
+│       │   ├── lock.py              # Lock use case (fetch + lock)
+│       │   ├── build.py             # Build use case (cache → artifacts)
+│       │   └── validate.py          # Validate use case
+│       └── infra/                   # Infrastructure layer (adapters)
+│           ├── config/              # Config loading
+│           ├── fetchers/            # Plugin fetchers (local + marketplace)
+│           ├── builders/            # Platform artifact builders
+│           └── storage/             # Cache management (PluginCache)
+├── tests/                           # Tests mirror source/ structure
+├── openspec/                        # Spec-driven development artifacts
+│   └── changes/                     # Active changes
+├── pyproject.toml                   # Python project config
+├── uv.lock                          # Locked dependencies
+├── promptkit.yaml                   # Example/template config
 ├── .promptkit/
-│   └── cache/                      # Cached upstream prompts (gitignored)
-├── prompts/                        # Local prompts (committed)
-├── .cursor/                        # Generated Cursor artifacts
-└── .claude/                        # Generated Claude Code artifacts
+│   └── cache/
+│       └── plugins/                 # Registry plugin cache ({reg}/{name}/{sha}/)
+├── prompts/                         # Local plugins (committed, can be dirs)
+├── .cursor/                         # Generated Cursor artifacts
+└── .claude/                         # Generated Claude Code artifacts
 ```
 
 ## MVP Commands
@@ -156,23 +175,23 @@ This project follows three disciplines: **DDD**, **TDD**, and **Clean Code**. Th
 
 ### DDD (Domain-Driven Design)
 
-- **Ubiquitous language** — use domain terms consistently. A `Prompt` is a `Prompt`, not a `Template` or `Config`. A `PromptSpec` is a `PromptSpec`, not a `Definition` or `Manifest`. If the domain term changes, rename everywhere.
-- **Entities vs Value Objects** — entities have identity (`Prompt` has an ID, persists, tracks state). Value objects are immutable data with no identity (`PromptMetadata`, `PlatformTarget`, `LockEntry`). Don't give value objects IDs.
-- **Aggregates** — `Prompt` is an aggregate root. Access its metadata and content through `Prompt`, not independently. Don't let outside code reach into aggregate internals.
-- **Domain logic in domain objects** — not in CLI handlers or builder code. If you're writing an `if` about prompt state in a command handler, it belongs in the domain layer.
+- **Ubiquitous language** — use domain terms consistently. A `Plugin` is a `Plugin`, not a `Template` or `Config`. A `PromptSpec` is a `PromptSpec`, not a `Definition` or `Manifest`. If the domain term changes, rename everywhere.
+- **Entities vs Value Objects** — value objects are immutable data with no identity (`Plugin`, `PromptSpec`, `PlatformTarget`, `LockEntry`). Don't give value objects IDs.
+- **Domain logic in domain objects** — not in CLI handlers or builder code. If you're writing an `if` about plugin state in a command handler, it belongs in the domain layer.
 
   **Example:**
   ```python
   # ✅ Good: Domain logic in domain object
-  # In domain/prompt.py
-  class Prompt:
-      def is_valid_for_platform(self, platform: PlatformTarget) -> bool:
-          return platform in self.spec.platforms
+  # In domain/plugin.py
+  class Plugin:
+      @property
+      def is_registry(self) -> bool:
+          return self.commit_sha is not None
 
   # ❌ Bad: Domain logic in CLI handler
   # In cli.py
-  if prompt.spec.platforms and platform in prompt.spec.platforms:
-      ...  # This logic should be in Prompt class
+  if plugin.commit_sha is not None:
+      ...  # This logic should be in Plugin class
   ```
 
 - **Domain layer has no outward dependencies** — domain code never imports infrastructure (file I/O, HTTP clients, YAML parsers). It depends only on protocols/interfaces.
@@ -185,7 +204,7 @@ This project follows three disciplines: **DDD**, **TDD**, and **Clean Code**. Th
 - **Test structure** — Arrange-Act-Assert. One assertion per test where practical.
 - **Unit tests** — domain logic in isolation, mock infrastructure. **Integration tests** — verify adapters work with real dependencies. **No tests for trivial code** — don't test getters, data classes, or framework glue.
 - **Test location** — tests live in a separate `tests/` directory that mirrors the `source/` structure (e.g., `tests/domain/test_prompt.py` tests `source/promptkit/domain/prompt.py`).
-- **Protocols enable testing** — every protocol (`PromptFetcher`, `ArtifactBuilder`, etc.) should have a test double.
+- **Protocols enable testing** — every protocol (`PluginFetcher`, `ArtifactBuilder`, etc.) should have a test double.
 
 ### Clean Code
 
@@ -229,13 +248,14 @@ This project follows three disciplines: **DDD**, **TDD**, and **Clean Code**. Th
 
 The MVP is complete when:
 
-1. Can sync a prompt from Claude plugin marketplace
-2. Can build artifacts for both Cursor and Claude Code
-3. Same config produces identical outputs (deterministic builds)
-4. Lock file ensures reproducibility
-5. Can use multiple prompts in a single project
-6. Validation catches config errors before build
-7. Init command scaffolds project structure
+1. Can sync a plugin from Claude marketplace (registry fetcher + cache + lock)
+2. Can build artifacts for both Cursor and Claude Code (copy file trees with directory mapping)
+3. Same config produces identical outputs (deterministic builds via commit SHA + lock file)
+4. Lock file ensures reproducibility (commit SHA for registry, content hash for local)
+5. Can use multiple plugins in a single project (local + registry)
+6. Local plugins support multi-file directories (not just single .md)
+7. Validation catches config errors before build
+8. Init command scaffolds project structure
 
 ## OpenSpec
 
@@ -254,7 +274,7 @@ Artifacts are stored in `openspec/changes/` during development and moved to `ope
 ## Resolved Questions
 
 - **CLI framework**: typer (modern type-safe CLI)
-- **Fetch from Claude marketplace**: GitHub-hosted registries, stub fetcher for initial phases (needs research)
+- **Fetch from Claude marketplace**: GitHub Contents API, `marketplace.json` manifest, full directory download
 - **Lock file format**: YAML (`promptkit.lock`)
 - **Prompt metadata**: YAML frontmatter (author, description) — optional, informational only
 - **Platform-specific mapping**: directory-based routing (source category dir → platform output dir), no artifact_type needed
@@ -263,3 +283,10 @@ Artifacts are stored in `openspec/changes/` during development and moved to `ope
 - **Frontmatter in build output?**: Stripped for platforms that don't need it; each builder decides
 - **Error handling**: Fail fast with clear messages, no retries for MVP
 - **Local prompt source in lock file**: source = `local/<filename>`
+- **Unified model**: `Plugin` replaces `Prompt` — both local and registry are file trees on disk
+- **Local multi-file**: Local prompts can be directories with non-md files (scripts, configs, hooks)
+- **Cache strategy**: Registry plugins cached by commit SHA (`{reg}/{plugin}/{sha}/`), local reads from `prompts/` directly
+- **`content_hash` for registry plugins**: Empty string `""` — `commit_sha` is the discriminator
+- **External git URL sources**: Skipped for MVP, `SyncError` raised
+- **Build strategy**: Copy files from source to output, no hard links or symlinks
+- **Platform nesting**: Skills = 1 level (`skills/<name>/SKILL.md`), agents/commands = flat
