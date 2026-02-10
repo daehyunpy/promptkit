@@ -14,10 +14,11 @@ class PromptFetcher(Protocol):
     Implementations: ClaudeMarketplaceFetcher (selected by registry type)
     """
 
-    def fetch(self, spec: PromptSpec, /) -> Prompt:
+    def fetch(self, spec: PromptSpec, /) -> list[Prompt]:
         """Fetch prompt content for the given spec.
 
-        Returns a Prompt with content populated from the source.
+        Returns a list of Prompts. Multi-file plugins produce multiple prompts
+        from a single spec; single-file prompts return a one-element list.
         """
         ...
 
