@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: CLI exposes lock command
-The CLI SHALL expose a `promptkit lock` command that fetches prompts and updates the lock file.
+The CLI SHALL expose a `promptkit lock` command that fetches prompts and updates the lock file. The lock command SHALL share infrastructure wiring with the sync and build commands via extracted helper functions to avoid duplication.
 
 #### Scenario: Successful lock
 - **WHEN** `promptkit lock` is run in a directory with a valid `promptkit.yaml`
