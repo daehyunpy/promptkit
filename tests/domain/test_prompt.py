@@ -53,6 +53,50 @@ class TestPromptContentHash:
         assert p1.content_hash != p2.content_hash
 
 
+class TestPromptCategory:
+    def test_category_skills(self) -> None:
+        prompt = Prompt(spec=PromptSpec(source="local/skills/my-skill"), content="c")
+        assert prompt.category == "skills"
+
+    def test_category_rules(self) -> None:
+        prompt = Prompt(spec=PromptSpec(source="local/rules/my-rule"), content="c")
+        assert prompt.category == "rules"
+
+    def test_category_agents(self) -> None:
+        prompt = Prompt(spec=PromptSpec(source="local/agents/my-agent"), content="c")
+        assert prompt.category == "agents"
+
+    def test_category_commands(self) -> None:
+        prompt = Prompt(spec=PromptSpec(source="local/commands/my-cmd"), content="c")
+        assert prompt.category == "commands"
+
+    def test_category_subagents(self) -> None:
+        prompt = Prompt(spec=PromptSpec(source="local/subagents/my-sub"), content="c")
+        assert prompt.category == "subagents"
+
+    def test_category_defaults_to_rules_for_flat_local(self) -> None:
+        prompt = Prompt(spec=PromptSpec(source="local/my-rule"), content="c")
+        assert prompt.category == "rules"
+
+    def test_category_defaults_to_rules_for_flat_remote(self) -> None:
+        prompt = Prompt(
+            spec=PromptSpec(source="registry/prompt-name"), content="c"
+        )
+        assert prompt.category == "rules"
+
+
+class TestPromptFilename:
+    def test_filename_from_flat_source(self) -> None:
+        prompt = Prompt(spec=PromptSpec(source="local/my-rule"), content="c")
+        assert prompt.filename == "my-rule"
+
+    def test_filename_from_nested_source(self) -> None:
+        prompt = Prompt(
+            spec=PromptSpec(source="local/skills/my-skill"), content="c"
+        )
+        assert prompt.filename == "my-skill"
+
+
 class TestPromptPlatformTargeting:
     def test_is_valid_for_platform_when_targeted(self) -> None:
         spec = PromptSpec(

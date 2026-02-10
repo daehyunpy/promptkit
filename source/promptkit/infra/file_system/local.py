@@ -1,5 +1,6 @@
 """Infrastructure layer: local file system implementation."""
 
+import shutil
 from pathlib import Path
 
 
@@ -36,3 +37,8 @@ class FileSystem:
         if not path.is_dir():
             return []
         return list(path.iterdir())
+
+    def remove_directory(self, path: Path, /) -> None:
+        """Remove a directory and all its contents."""
+        if path.is_dir():
+            shutil.rmtree(path)

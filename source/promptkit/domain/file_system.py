@@ -41,3 +41,10 @@ class FileSystem(Protocol):
         Returns an empty list if the directory does not exist.
         """
         ...
+
+    def remove_directory(self, path: Path, /) -> None:
+        """Remove a directory and all its contents.
+
+        No-op if the directory does not exist.
+        """
+        ...
