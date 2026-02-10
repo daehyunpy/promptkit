@@ -191,3 +191,48 @@ def test_build_fails_without_config(working_dir: Path) -> None:
 
     assert result.exit_code == 1
     assert "Error" in result.output
+
+
+# --- sync command ---
+
+
+def test_sync_command_shows_in_help() -> None:
+    """sync command should appear in CLI help."""
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "sync" in result.stdout
+
+
+def test_sync_succeeds_with_local_prompts(working_dir: Path) -> None:
+    """sync command should lock and build local prompts in one step."""
+    _scaffold_project(working_dir)
+    (working_dir / "prompts" / "my-rule.md").write_text("# My Rule")
+
+    result = runner.invoke(app, ["sync"])
+
+    assert result.exit_code == 0
+    # Lock file should be updated
+    lock_content = yaml.safe_load(
+        (working_dir / "promptkit.lock").read_text()
+    )
+    assert len(lock_content["prompts"]) == 1
+    assert lock_content["prompts"][0]["source"] == "local/my-rule"
+    # Artifacts should be generated
+    assert (working_dir / ".cursor" / "rules" / "my-rule.md").exists()
+    assert (working_dir / ".claude" / "rules" / "my-rule.md").exists()
+
+
+def test_sync_fails_without_config(working_dir: Path) -> None:
+    """sync command should fail when no promptkit.yaml exists."""
+    result = runner.invoke(app, ["sync"])
+
+    assert result.exit_code == 1
+    assert "Error" in result.output
+
+
+def test_sync_lock_failure_skips_build(working_dir: Path) -> None:
+    """sync command should not attempt build when lock fails."""
+    result = runner.invoke(app, ["sync"])
+
+    assert result.exit_code == 1
+    assert "Building" not in result.output

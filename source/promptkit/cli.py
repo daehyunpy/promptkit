@@ -7,7 +7,7 @@ import typer
 from promptkit.app.build import BuildArtifacts
 from promptkit.app.init import InitProject, InitProjectError
 from promptkit.app.lock import LockPrompts
-from promptkit.domain.errors import BuildError, SyncError, ValidationError
+from promptkit.domain.errors import PromptError
 from promptkit.domain.platform_target import PlatformTarget
 from promptkit.infra.builders.claude_builder import ClaudeBuilder
 from promptkit.infra.builders.cursor_builder import CursorBuilder
@@ -42,6 +42,32 @@ Next steps:
 """
 
 
+def _make_lock_use_case(cwd: Path, fs: FileSystem) -> LockPrompts:
+    """Create a LockPrompts use case with standard wiring."""
+    return LockPrompts(
+        file_system=fs,
+        yaml_loader=YamlLoader(),
+        lock_file=LockFile(),
+        prompt_cache=PromptCache(fs, cwd / CACHE_DIR),
+        local_fetcher=LocalFileFetcher(fs, cwd / PROMPTS_DIR),
+        fetchers={},
+    )
+
+
+def _make_build_use_case(cwd: Path, fs: FileSystem) -> BuildArtifacts:
+    """Create a BuildArtifacts use case with standard wiring."""
+    return BuildArtifacts(
+        file_system=fs,
+        yaml_loader=YamlLoader(),
+        lock_file=LockFile(),
+        prompt_cache=PromptCache(fs, cwd / CACHE_DIR),
+        builders={
+            PlatformTarget.CURSOR: CursorBuilder(fs),
+            PlatformTarget.CLAUDE_CODE: ClaudeBuilder(fs),
+        },
+    )
+
+
 @app.command()
 def init() -> None:
     """Initialize a new promptkit project."""
@@ -60,17 +86,9 @@ def lock() -> None:
     try:
         cwd = Path.cwd()
         fs = FileSystem()
-        use_case = LockPrompts(
-            file_system=fs,
-            yaml_loader=YamlLoader(),
-            lock_file=LockFile(),
-            prompt_cache=PromptCache(fs, cwd / CACHE_DIR),
-            local_fetcher=LocalFileFetcher(fs, cwd / PROMPTS_DIR),
-            fetchers={},
-        )
-        use_case.execute(cwd)
+        _make_lock_use_case(cwd, fs).execute(cwd)
         typer.echo("Locked promptkit.lock")
-    except (SyncError, ValidationError, FileNotFoundError) as e:
+    except (PromptError, FileNotFoundError) as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1)
 
@@ -81,19 +99,25 @@ def build() -> None:
     try:
         cwd = Path.cwd()
         fs = FileSystem()
-        use_case = BuildArtifacts(
-            file_system=fs,
-            yaml_loader=YamlLoader(),
-            lock_file=LockFile(),
-            prompt_cache=PromptCache(fs, cwd / CACHE_DIR),
-            builders={
-                PlatformTarget.CURSOR: CursorBuilder(fs),
-                PlatformTarget.CLAUDE_CODE: ClaudeBuilder(fs),
-            },
-        )
-        use_case.execute(cwd)
+        _make_build_use_case(cwd, fs).execute(cwd)
         typer.echo("Built platform artifacts")
-    except (BuildError, ValidationError, FileNotFoundError) as e:
+    except (PromptError, FileNotFoundError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def sync() -> None:
+    """Fetch prompts, update lock file, and generate artifacts."""
+    try:
+        cwd = Path.cwd()
+        fs = FileSystem()
+        typer.echo("Locking prompts...")
+        _make_lock_use_case(cwd, fs).execute(cwd)
+        typer.echo("Building artifacts...")
+        _make_build_use_case(cwd, fs).execute(cwd)
+        typer.echo("Synced prompts and built artifacts")
+    except (PromptError, FileNotFoundError) as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1)
 
