@@ -88,6 +88,8 @@ Both implement the protocol. `PromptFetcher` is removed entirely.
 
 Cache key is `{registry_name}/{plugin_name}/{commit_sha}`. The commit SHA comes from the GitHub API. The lock file records this SHA for reproducibility — `promptkit lock` only re-downloads when the SHA changes.
 
+`PluginCache` is a read-only lookup: `has()`, `plugin_dir()`, `list_files()`. Fetchers write to the cache directory directly — they call `plugin_dir()` to get the target path, then create directories and write files there. This is fine because both `PluginCache` and fetchers live in the infra layer.
+
 The old content-addressable `PromptCache` (`sha256-*.md` flat files) is removed.
 
 ### 5. `LockEntry` gains optional `commit_sha` field; `content_hash` stays `str`
@@ -114,9 +116,9 @@ class LockEntry:
 
 **Rationale:** One lock entry per plugin (one per `PromptSpec` in config, one per discovered local plugin). The lock entry records the plugin name, source, commit SHA (if registry), content hash (if local), and timestamp. Individual files are tracked implicitly via the cached directory or the local `prompts/` structure.
 
-### 8. Builders copy entire file trees — no filtering
+### 8. Fetchers download all files — builders decide what to copy per platform
 
-**Rationale:** At build time, builders resolve the source directory for each lock entry and copy the entire file tree to the platform output directory. No files are excluded (including `.claude-plugin/plugin.json`, `.mcp.json`, etc.) — if the platform can't use a file, it simply ignores it. This avoids maintaining an exclusion list. Directory mapping applies (e.g., `skills/` → `skills-cursor/` for Cursor). Files are just copied — no hard links, no symlinks, no content transformation.
+**Rationale:** Fetchers download the entire plugin file tree without filtering. At build time, each builder decides what to copy based on its platform. Claude Code copies everything. Cursor skips unsupported categories (agents, commands, hooks) and applies directory mapping (e.g., `skills/` → `skills-cursor/`). No files are excluded at the fetch/cache layer — only builders filter. Files are just copied — no hard links, no symlinks, no content transformation.
 
 For local plugins: source is `prompts/`.
 For registry plugins: source is `.promptkit/cache/plugins/{registry}/{plugin}/{sha}/`.

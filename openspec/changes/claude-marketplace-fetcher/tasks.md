@@ -84,14 +84,14 @@
 - [ ] 9.1 Remove `PromptCache` dependency
 - [ ] 9.2 Add `PluginCache` dependency for resolving registry plugin source dirs
 - [ ] 9.3 Replace `_load_prompt()` with `_resolve_source_dir()`: local → `prompts/`, registry → `PluginCache` dir
-- [ ] 9.4 Update builder calls: pass source_dir + file list instead of `list[Prompt]`
+- [ ] 9.4 Update builder calls: pass `list[Plugin]` instead of `list[Prompt]`
 - [ ] 9.5 Update `tests/app/test_build.py` for new Plugin-based build path
 - [ ] 9.6 Add tests: build local single-file, build local directory, build registry plugin, cache missing → BuildError
 - [ ] 9.7 Run `pytest tests/app/test_build.py -v` — green
 
 ## 10. Update ArtifactBuilder protocol and builders
 
-- [ ] 10.1 Update `ArtifactBuilder` protocol: `build(source_dir, files, output_dir)` instead of `build(list[Prompt], output_dir)`
+- [ ] 10.1 Update `ArtifactBuilder` protocol: `build(plugins: list[Plugin], output_dir)` instead of `build(prompts: list[Prompt], output_dir)`
 - [ ] 10.2 Update `CursorBuilder`: copy file tree from source_dir to output_dir with directory mapping, skip unsupported categories (agents, commands, hooks)
 - [ ] 10.3 Update `ClaudeBuilder`: copy file tree from source_dir to output_dir preserving structure
 - [ ] 10.4 Handle non-md files: copy as-is (no extension filtering)
