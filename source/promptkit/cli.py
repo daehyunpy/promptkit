@@ -4,9 +4,13 @@ from pathlib import Path
 
 import typer
 
+from promptkit.app.build import BuildArtifacts
 from promptkit.app.init import InitProject, InitProjectError
 from promptkit.app.lock import LockPrompts
-from promptkit.domain.errors import SyncError, ValidationError
+from promptkit.domain.errors import BuildError, SyncError, ValidationError
+from promptkit.domain.platform_target import PlatformTarget
+from promptkit.infra.builders.claude_builder import ClaudeBuilder
+from promptkit.infra.builders.cursor_builder import CursorBuilder
 from promptkit.infra.config.lock_file import LockFile
 from promptkit.infra.config.yaml_loader import YamlLoader
 from promptkit.infra.config_serializer import serialize_config_to_yaml
@@ -67,6 +71,29 @@ def lock() -> None:
         use_case.execute(cwd)
         typer.echo("Locked promptkit.lock")
     except (SyncError, ValidationError, FileNotFoundError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def build() -> None:
+    """Generate platform-specific artifacts from cached prompts."""
+    try:
+        cwd = Path.cwd()
+        fs = FileSystem()
+        use_case = BuildArtifacts(
+            file_system=fs,
+            yaml_loader=YamlLoader(),
+            lock_file=LockFile(),
+            prompt_cache=PromptCache(fs, cwd / CACHE_DIR),
+            builders={
+                PlatformTarget.CURSOR: CursorBuilder(fs),
+                PlatformTarget.CLAUDE_CODE: ClaudeBuilder(fs),
+            },
+        )
+        use_case.execute(cwd)
+        typer.echo("Built platform artifacts")
+    except (BuildError, ValidationError, FileNotFoundError) as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1)
 

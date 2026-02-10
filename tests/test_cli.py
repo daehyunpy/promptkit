@@ -147,3 +147,47 @@ def test_lock_succeeds_with_no_prompts(working_dir: Path) -> None:
         (working_dir / "promptkit.lock").read_text()
     )
     assert lock_content["prompts"] == []
+
+
+# --- build command ---
+
+
+def test_build_command_shows_in_help() -> None:
+    """build command should appear in CLI help."""
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "build" in result.stdout
+
+
+def test_build_succeeds_with_local_prompts(working_dir: Path) -> None:
+    """build command should generate artifacts from locked local prompts."""
+    _scaffold_project(working_dir)
+    (working_dir / "prompts" / "my-rule.md").write_text("# My Rule")
+    # Lock first (lock-first workflow)
+    runner.invoke(app, ["lock"])
+
+    result = runner.invoke(app, ["build"])
+
+    assert result.exit_code == 0
+    assert "Built" in result.stdout
+    assert (working_dir / ".cursor" / "rules" / "my-rule.md").exists()
+    assert (working_dir / ".claude" / "rules" / "my-rule.md").exists()
+
+
+def test_build_fails_without_lock_file(working_dir: Path) -> None:
+    """build command should fail when promptkit.lock is missing."""
+    _scaffold_project(working_dir)
+    (working_dir / "promptkit.lock").unlink()
+
+    result = runner.invoke(app, ["build"])
+
+    assert result.exit_code == 1
+    assert "Error" in result.output
+
+
+def test_build_fails_without_config(working_dir: Path) -> None:
+    """build command should fail when promptkit.yaml is missing."""
+    result = runner.invoke(app, ["build"])
+
+    assert result.exit_code == 1
+    assert "Error" in result.output
