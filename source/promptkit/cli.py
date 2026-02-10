@@ -7,8 +7,10 @@ import typer
 from promptkit.app.build import BuildArtifacts
 from promptkit.app.init import InitProject, InitProjectError
 from promptkit.app.lock import LockPrompts
+from promptkit.app.validate import ValidateConfig
 from promptkit.domain.errors import PromptError
 from promptkit.domain.platform_target import PlatformTarget
+from promptkit.domain.validation import LEVEL_ERROR, ValidationIssue
 from promptkit.infra.builders.claude_builder import ClaudeBuilder
 from promptkit.infra.builders.cursor_builder import CursorBuilder
 from promptkit.infra.config.lock_file import LockFile
@@ -68,6 +70,15 @@ def _make_build_use_case(cwd: Path, fs: FileSystem) -> BuildArtifacts:
     )
 
 
+def _make_validate_use_case(fs: FileSystem) -> ValidateConfig:
+    """Create a ValidateConfig use case with standard wiring."""
+    return ValidateConfig(
+        file_system=fs,
+        yaml_loader=YamlLoader(),
+        lock_file=LockFile(),
+    )
+
+
 @app.command()
 def init() -> None:
     """Initialize a new promptkit project."""
@@ -120,6 +131,29 @@ def sync() -> None:
     except (PromptError, FileNotFoundError) as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1)
+
+
+@app.command()
+def validate() -> None:
+    """Verify config is well-formed and prompts exist."""
+    cwd = Path.cwd()
+    fs = FileSystem()
+    result = _make_validate_use_case(fs).execute(cwd)
+
+    for issue in result.issues:
+        _echo_issue(issue)
+
+    if result.is_valid:
+        typer.echo("Config is valid")
+    else:
+        raise typer.Exit(code=1)
+
+
+def _echo_issue(issue: ValidationIssue) -> None:
+    """Print a validation issue with appropriate prefix and stream."""
+    is_error = issue.level == LEVEL_ERROR
+    prefix = "Error" if is_error else "Warning"
+    typer.echo(f"{prefix}: {issue.message}", err=is_error)
 
 
 if __name__ == "__main__":

@@ -236,3 +236,57 @@ def test_sync_lock_failure_skips_build(working_dir: Path) -> None:
 
     assert result.exit_code == 1
     assert "Building" not in result.output
+
+
+# --- validate command ---
+
+
+def test_validate_command_shows_in_help() -> None:
+    """validate command should appear in CLI help."""
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "validate" in result.stdout
+
+
+def test_validate_succeeds_with_valid_config(working_dir: Path) -> None:
+    """validate command should exit 0 for a valid, locked config."""
+    _scaffold_project(working_dir)
+    (working_dir / "prompts" / "my-rule.md").write_text("# My Rule")
+    runner.invoke(app, ["lock"])
+
+    result = runner.invoke(app, ["validate"])
+
+    assert result.exit_code == 0
+    assert "valid" in result.stdout.lower()
+
+
+def test_validate_fails_with_invalid_config(working_dir: Path) -> None:
+    """validate command should exit 1 when config has errors."""
+    _scaffold_project(working_dir)
+    (working_dir / "promptkit.yaml").write_text("version: [[[invalid")
+
+    result = runner.invoke(app, ["validate"])
+
+    assert result.exit_code == 1
+    assert "error" in result.output.lower()
+
+
+def test_validate_fails_without_config(working_dir: Path) -> None:
+    """validate command should exit 1 when no config file exists."""
+    result = runner.invoke(app, ["validate"])
+
+    assert result.exit_code == 1
+    assert "error" in result.output.lower()
+
+
+def test_validate_shows_warnings_with_exit_zero(working_dir: Path) -> None:
+    """validate command should show warnings but exit 0 when no errors."""
+    _scaffold_project(working_dir)
+    (working_dir / "prompts" / "my-rule.md").write_text("# My Rule")
+    # Don't lock — so there will be a "no lock file" warning
+    (working_dir / "promptkit.lock").unlink()
+
+    result = runner.invoke(app, ["validate"])
+
+    assert result.exit_code == 0
+    assert "warning" in result.output.lower()
