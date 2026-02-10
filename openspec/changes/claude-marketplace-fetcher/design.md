@@ -65,18 +65,20 @@ The previous design changed `PromptFetcher.fetch()` to return `list[Prompt]` —
 
 Cache key is `{registry_name}/{plugin_name}/{commit_sha}`. The commit SHA comes from the GitHub API (latest commit on default branch). The lock file records this SHA for reproducibility — `promptkit lock` only re-downloads when the SHA changes.
 
-### 4. `LockEntry` gains optional `commit_sha` field
+### 4. `LockEntry` gains optional `commit_sha` field; `content_hash` stays `str`
 
 **Rationale:** Remote plugins are versioned by commit SHA, not content hash. The lock file needs to record this for reproducibility. Local prompts continue using `content_hash`.
+
+For registry plugins, `content_hash` is set to `""` (empty string). This avoids a type change to `str | None` which would break all downstream consumers. The `commit_sha` field is the discriminator — if it's set, this is a registry plugin; if `None`, it's a local prompt.
 
 ```python
 @dataclass(frozen=True)
 class LockEntry:
     name: str
     source: str
-    content_hash: str
+    content_hash: str           # SHA256 for local, "" for registry plugins
     fetched_at: datetime
-    commit_sha: str | None = None  # Only for remote plugins
+    commit_sha: str | None = None  # Only for registry plugins
 ```
 
 This is backward-compatible — existing lock files without `commit_sha` still parse correctly.
@@ -128,7 +130,7 @@ For each remote spec:
     If SHA matches lock → skip (already cached)
     Otherwise → list plugin dir → download all files → write to cache
     Return Plugin(spec, commit_sha, files)
-    Write LockEntry(name, source, content_hash="", commit_sha=sha, fetched_at)
+    Write LockEntry(name, source, content_hash="", fetched_at, commit_sha=sha)
 For each local spec:
     LocalFileFetcher → Prompt → cache content → LockEntry (unchanged)
 Write promptkit.lock

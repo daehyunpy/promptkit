@@ -6,7 +6,7 @@ The `LockEntry` value object SHALL have an optional `commit_sha` field. Remote p
 #### Scenario: Lock entry for remote plugin
 - **WHEN** a `LockEntry` is created for a remote plugin
 - **THEN** `commit_sha` is set to the GitHub commit SHA string
-- **AND** `content_hash` may be empty (files are on disk, not hashed individually)
+- **AND** `content_hash` is `""` (empty string — registry plugins use commit SHA, not content hash)
 
 #### Scenario: Lock entry for local prompt
 - **WHEN** a `LockEntry` is created for a local prompt

@@ -12,7 +12,7 @@
 
 ## 3. Add commit_sha to LockEntry
 
-- [ ] 3.1 Add `commit_sha: str | None = None` field to `LockEntry` in `source/promptkit/domain/lock_entry.py`
+- [ ] 3.1 Add `commit_sha: str | None = None` field to `LockEntry` in `source/promptkit/domain/lock_entry.py` (keep `content_hash: str` — use `""` for registry plugins)
 - [ ] 3.2 Update `LockFile.serialize()` / `LockFile.deserialize()` in `source/promptkit/infra/config/lock_file.py` to handle `commit_sha` (write when present, parse when present, default to None)
 - [ ] 3.3 Update `tests/domain/test_lock_entry.py` for new field
 - [ ] 3.4 Update `tests/infra/config/test_lock_file.py` for serialization/deserialization with and without commit_sha
