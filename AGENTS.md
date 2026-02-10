@@ -289,4 +289,8 @@ Artifacts are stored in `openspec/changes/` during development and moved to `ope
 - **`content_hash` for registry plugins**: Empty string `""` — `commit_sha` is the discriminator
 - **External git URL sources**: Skipped for MVP, `SyncError` raised
 - **Build strategy**: Copy files from source to output, no hard links or symlinks
+- **Build filtering**: Copy everything — no file exclusions. Platforms ignore unknown files
+- **Builder protocol**: `build(list[Plugin], output_dir)` — builders receive Plugin objects directly
+- **Local directory hashing**: Sort files by path, concatenate path + content, sha256 the result
 - **Platform nesting**: Skills = 1 level (`skills/<name>/SKILL.md`), agents/commands = flat
+- **`RegistryType` enum**: CLAUDE_MARKETPLACE
