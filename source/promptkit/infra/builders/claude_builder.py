@@ -13,7 +13,8 @@ from promptkit.infra.builders.manifest import (
 )
 
 PLATFORM_NAME = "claude"
-ALLOWED_CATEGORIES = {"commands", "agents", "skills", "hooks", "scripts", "rules"}
+# TODO: add "hooks", "scripts", "mcp" when platform support is adapted
+ALLOWED_CATEGORIES = {"commands", "agents", "skills", "rules"}
 
 
 class ClaudeBuilder:

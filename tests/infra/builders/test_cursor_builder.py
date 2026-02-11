@@ -54,7 +54,7 @@ def _make_plugin(
 
 
 class TestDirectoryMapping:
-    def test_maps_skills_to_skills_cursor(
+    def test_preserves_skills_directory(
         self,
         builder: CursorBuilder,
         source_dir: Path,
@@ -71,7 +71,7 @@ class TestDirectoryMapping:
         builder.build([plugin], output_dir, project_dir)
 
         assert (
-            output_dir / "skills-cursor" / "my-skill" / "SKILL.md"
+            output_dir / "skills" / "my-skill" / "SKILL.md"
         ).read_text() == "# Skill"
 
     def test_preserves_rules(
@@ -87,20 +87,6 @@ class TestDirectoryMapping:
 
         assert (output_dir / "rules" / "my-rule.md").read_text() == "# Rule"
 
-    def test_passes_through_scripts_without_mapping(
-        self,
-        builder: CursorBuilder,
-        source_dir: Path,
-        output_dir: Path,
-        project_dir: Path,
-    ) -> None:
-        plugin = _make_plugin(source_dir, {"scripts/check.sh": "#!/bin/bash"})
-
-        builder.build([plugin], output_dir, project_dir)
-
-        assert (output_dir / "scripts" / "check.sh").read_text() == "#!/bin/bash"
-
-
 class TestCategoryFiltering:
     def test_only_copies_allowed_categories(
         self,
@@ -114,10 +100,8 @@ class TestCategoryFiltering:
             {
                 "skills/my-skill/SKILL.md": "# Skill",
                 "rules/my-rule.md": "# Rule",
-                "scripts/check.sh": "#!/bin/bash",
                 "agents/reviewer.md": "# Agent",
                 "commands/my-cmd.md": "# Command",
-                "hooks/hooks.json": "{}",
                 "README.md": "# Readme",
                 ".claude-plugin/plugin.json": '{}',
             },
@@ -125,12 +109,10 @@ class TestCategoryFiltering:
 
         builder.build([plugin], output_dir, project_dir)
 
-        assert (output_dir / "skills-cursor" / "my-skill" / "SKILL.md").exists()
+        assert (output_dir / "skills" / "my-skill" / "SKILL.md").exists()
         assert (output_dir / "rules" / "my-rule.md").exists()
-        assert (output_dir / "scripts" / "check.sh").exists()
         assert (output_dir / "agents" / "reviewer.md").exists()
         assert (output_dir / "commands" / "my-cmd.md").exists()
-        assert (output_dir / "hooks" / "hooks.json").exists()
         assert not (output_dir / "README.md").exists()
         assert not (output_dir / ".claude-plugin").exists()
 
@@ -207,19 +189,19 @@ class TestManifestCleanup:
         assert not (output_dir / "my-rule.md").exists()
         assert (output_dir / "rules" / "real.md").exists()
 
-    def test_manifest_records_mapped_paths(
+    def test_manifest_records_output_paths(
         self,
         builder: CursorBuilder,
         source_dir: Path,
         output_dir: Path,
         project_dir: Path,
     ) -> None:
-        """Manifest should contain mapped paths (skills-cursor), not source paths."""
+        """Manifest should contain output paths."""
         plugin = _make_plugin(source_dir, {"skills/my-skill/SKILL.md": "# Skill"})
         builder.build([plugin], output_dir, project_dir)
 
         manifest = read_manifest(project_dir, "cursor")
-        assert "skills-cursor/my-skill/SKILL.md" in manifest
+        assert "skills/my-skill/SKILL.md" in manifest
 
 
 class TestReturnPaths:
@@ -245,7 +227,7 @@ class TestReturnPaths:
         assert len(paths) == 3
         assert output_dir / "rules" / "a.md" in paths
         assert output_dir / "agents" / "b.md" in paths
-        assert output_dir / "skills-cursor" / "c" / "SKILL.md" in paths
+        assert output_dir / "skills" / "c" / "SKILL.md" in paths
 
 
 

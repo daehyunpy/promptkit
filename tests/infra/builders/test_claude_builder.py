@@ -67,8 +67,6 @@ class TestFileCopying:
                 "agents/reviewer.md": "# Reviewer",
                 "commands/run.md": "# Run",
                 "skills/xlsx/SKILL.md": "# XLSX",
-                "hooks/hooks.json": '{"hooks": []}',
-                "scripts/check.sh": "#!/bin/bash",
             },
         )
 
@@ -77,8 +75,6 @@ class TestFileCopying:
         assert (output_dir / "agents" / "reviewer.md").read_text() == "# Reviewer"
         assert (output_dir / "commands" / "run.md").read_text() == "# Run"
         assert (output_dir / "skills" / "xlsx" / "SKILL.md").read_text() == "# XLSX"
-        assert (output_dir / "hooks" / "hooks.json").read_text() == '{"hooks": []}'
-        assert (output_dir / "scripts" / "check.sh").read_text() == "#!/bin/bash"
 
     def test_preserves_nested_directory_structure(
         self,

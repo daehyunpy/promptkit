@@ -1,15 +1,11 @@
 ## ADDED Requirements
 
-### Requirement: CursorBuilder copies only allowed category files with directory mapping
-The `CursorBuilder` SHALL implement the `ArtifactBuilder` protocol and copy only files under allowed category directories to `.cursor/`. The allowed categories are: `commands`, `agents`, `skills`, `hooks`, `scripts`, `rules`. Files outside these categories (e.g., `README.md`, `.claude-plugin/`) SHALL be skipped. The `skills/` directory is mapped to `skills-cursor/` in the output.
+### Requirement: CursorBuilder copies only allowed category files
+The `CursorBuilder` SHALL implement the `ArtifactBuilder` protocol and copy only files under allowed category directories to `.cursor/`. The allowed categories are: `commands`, `agents`, `skills`, `hooks`, `scripts`, `rules`. Files outside these categories (e.g., `README.md`, `.claude-plugin/`) SHALL be skipped. Directory names are preserved unchanged (e.g., `skills/` → `.cursor/skills/`).
 
 #### Scenario: Copy files in allowed categories
 - **WHEN** a plugin contains files in `commands/`, `agents/`, `skills/`, `hooks/`, `scripts/`, and `rules/`
-- **THEN** all files under those directories are copied to the output directory
-
-#### Scenario: Map skills to skills-cursor
-- **WHEN** a plugin contains files in `skills/`
-- **THEN** those files are copied to `<output_dir>/skills-cursor/`
+- **THEN** all files under those directories are copied to the output directory with directory names preserved
 
 #### Scenario: Skip files outside allowed categories
 - **WHEN** a plugin contains `README.md` and `.claude-plugin/plugin.json`

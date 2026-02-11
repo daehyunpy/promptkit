@@ -151,4 +151,4 @@ Builders SHALL receive source directories and copy file trees to platform output
 #### Scenario: Build for Cursor
 - **WHEN** building a plugin with files `agents/reviewer.md`, `skills/my-skill/SKILL.md`
 - **THEN** only skills are copied to `.cursor/` (agents, commands, hooks are skipped for Cursor)
-- **AND** skills directory maps to `skills-cursor/`
+- **AND** skills directory is preserved as `skills/`

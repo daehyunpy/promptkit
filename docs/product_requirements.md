@@ -65,7 +65,7 @@ High-quality prompts exist in the Claude plugin marketplace and official documen
 
 4. **Multi-Platform Build**
    - `promptkit build` generates platform-specific artifacts from cached prompts (no network needed)
-   - **Cursor**: Generates `.cursor/` artifacts (agents, skills-cursor, rules, commands)
+   - **Cursor**: Generates `.cursor/` artifacts (agents, skills, rules, commands)
    - **Claude Code**: Generates `.claude/` artifacts (skills, rules, subagents, commands)
    - Deterministic builds — same input always produces identical output (no AI transformation)
    - Useful after `lock`, after reverting a lockfile via git, or for rebuilding after config changes

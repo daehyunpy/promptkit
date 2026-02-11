@@ -281,7 +281,7 @@ Each source category maps to a platform-specific subdirectory:
 
 | Source category | Cursor output | Claude Code output |
 |---|---|---|
-| `skills/` | `.cursor/skills-cursor/<name>.md` | `.claude/skills/<name>.md` |
+| `skills/` | `.cursor/skills/<name>.md` | `.claude/skills/<name>.md` |
 | `rules/` | `.cursor/rules/<name>.md` | `.claude/rules/<name>.md` |
 | `agents/` | `.cursor/agents/<name>.md` | `.claude/agents/<name>.md` |
 | `commands/` | `.cursor/commands/<name>.md` | `.claude/commands/<name>.md` |
@@ -619,7 +619,7 @@ promptkit = "promptkit.cli:app"
 
 6. **Platform Mapping** - Deterministic copy + route (no transformation)
    - Each prompt's source category directory determines the output subdirectory
-   - Builder maps source categories to platform-specific paths (e.g., `skills/` → `skills-cursor/` for Cursor)
+   - Builder copies source categories to platform output directories unchanged
    - No AI transformation in the build pipeline for MVP
 
 7. **Hash Algorithm** - SHA256 of full file content (including frontmatter)

@@ -12,11 +12,8 @@ from promptkit.infra.builders.manifest import (
     write_manifest,
 )
 
-ALLOWED_CATEGORIES = {"commands", "agents", "skills", "hooks", "scripts", "rules"}
-
-CATEGORY_MAPPING: dict[str, str] = {
-    "skills": "skills-cursor",
-}
+# TODO: add "hooks", "scripts", "mcp" when platform support is adapted
+ALLOWED_CATEGORIES = {"commands", "agents", "skills", "rules"}
 
 PLATFORM_NAME = "cursor"
 
@@ -24,9 +21,8 @@ PLATFORM_NAME = "cursor"
 class CursorBuilder:
     """Builds .cursor/ artifacts by copying plugin file trees.
 
-    Implements the ArtifactBuilder protocol. Applies directory mapping
-    (skills → skills-cursor). Uses manifest-based cleanup to preserve
-    non-promptkit files.
+    Implements the ArtifactBuilder protocol. Filters to allowed categories
+    and uses manifest-based cleanup to preserve non-promptkit files.
     """
 
     def __init__(self, file_system: FileSystem, /) -> None:
@@ -63,19 +59,16 @@ class CursorBuilder:
 
     @staticmethod
     def _map_path(file_path: str, /) -> str | None:
-        """Map a file path for Cursor, applying directory renames and filtering.
+        """Filter to allowed categories, passing paths through unchanged.
 
         Returns None if the file is not under an allowed category.
         """
         if "/" not in file_path:
             return None
 
-        top_dir, rest = file_path.split("/", 1)
+        top_dir = file_path.split("/", 1)[0]
 
         if top_dir not in ALLOWED_CATEGORIES:
             return None
-
-        if top_dir in CATEGORY_MAPPING:
-            return f"{CATEGORY_MAPPING[top_dir]}/{rest}"
 
         return file_path
