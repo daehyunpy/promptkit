@@ -1,5 +1,7 @@
 """Infrastructure layer: Fetch plugins from Claude Code marketplace (GitHub)."""
 
+import base64
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -96,7 +98,9 @@ class ClaudeMarketplaceFetcher:
         url = f"{GITHUB_API_BASE}/repos/{self._owner}/{self._repo}/contents/{MARKETPLACE_PATH}"
         response = self._client.get(url)
         response.raise_for_status()
-        return response.json()
+        envelope = response.json()
+        content = base64.b64decode(envelope["content"]).decode()
+        return json.loads(content)
 
     def _find_plugin_entry(
         self, marketplace: dict[str, Any], plugin_name: str, /

@@ -1,5 +1,7 @@
 """Tests for ClaudeMarketplaceFetcher."""
 
+import base64
+import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -30,6 +32,12 @@ def _make_download_response(content: bytes, status_code: int = 200) -> MagicMock
     response.status_code = status_code
     response.content = content
     return response
+
+
+def _make_github_contents_response(payload: dict) -> MagicMock:
+    """Wrap a JSON payload in a GitHub Contents API envelope response."""
+    encoded = base64.b64encode(json.dumps(payload).encode()).decode()
+    return _make_response({"content": encoded})
 
 
 SAMPLE_MARKETPLACE_JSON = {
@@ -123,7 +131,7 @@ class TestFetchPlugin:
         # Call order: marketplace → commit → list root → list agents/ →
         # download simplifier.md → list hooks/ → download hooks.json
         client.get.side_effect = [
-            _make_response(SAMPLE_MARKETPLACE_JSON),
+            _make_github_contents_response(SAMPLE_MARKETPLACE_JSON),
             _make_response(SAMPLE_COMMIT_RESPONSE),
             _make_response(SAMPLE_DIR_LISTING),
             _make_response(SAMPLE_AGENTS_LISTING),
@@ -153,7 +161,7 @@ class TestFetchPlugin:
         (cache_dir / "agents" / "simplifier.md").write_text("cached")
 
         client.get.side_effect = [
-            _make_response(SAMPLE_MARKETPLACE_JSON),
+            _make_github_contents_response(SAMPLE_MARKETPLACE_JSON),
             _make_response(SAMPLE_COMMIT_RESPONSE),
         ]
 
@@ -168,7 +176,7 @@ class TestFetchPlugin:
 
     def test_plugin_not_found_raises(self, cache: PluginCache) -> None:
         client = MagicMock(spec=httpx.Client)
-        client.get.return_value = _make_response(SAMPLE_MARKETPLACE_JSON)
+        client.get.return_value = _make_github_contents_response(SAMPLE_MARKETPLACE_JSON)
 
         fetcher = _make_fetcher(cache, client)
         spec = PromptSpec(source="claude-plugins-official/nonexistent")
@@ -178,7 +186,7 @@ class TestFetchPlugin:
 
     def test_external_source_raises(self, cache: PluginCache) -> None:
         client = MagicMock(spec=httpx.Client)
-        client.get.return_value = _make_response(SAMPLE_MARKETPLACE_JSON)
+        client.get.return_value = _make_github_contents_response(SAMPLE_MARKETPLACE_JSON)
 
         fetcher = _make_fetcher(cache, client)
         spec = PromptSpec(source="claude-plugins-official/external-plugin")
@@ -255,7 +263,7 @@ class TestSkillsRepoStructure:
         # Call order: marketplace → commit → list xlsx/ → download SKILL.md →
         # list xlsx/scripts/ → download processor.py → list docx/ → download SKILL.md
         client.get.side_effect = [
-            _make_response(skills_marketplace),
+            _make_github_contents_response(skills_marketplace),
             _make_response(SAMPLE_COMMIT_RESPONSE),
             _make_response(xlsx_listing),
             _make_download_response(b"# XLSX Skill"),
