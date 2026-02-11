@@ -274,6 +274,56 @@ def test_validate_fails_without_config(working_dir: Path) -> None:
     assert "error" in result.output.lower()
 
 
+# --- clean command ---
+
+
+def test_clean_command_shows_in_help() -> None:
+    """clean command should appear in CLI help."""
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "clean" in result.stdout
+
+
+def test_clean_succeeds_after_build(working_dir: Path) -> None:
+    """clean command should remove managed artifacts after a build."""
+    _scaffold_project(working_dir)
+    (working_dir / "prompts" / "rules").mkdir(parents=True, exist_ok=True)
+    (working_dir / "prompts" / "rules" / "my-rule.md").write_text("# My Rule")
+    runner.invoke(app, ["lock"])
+    runner.invoke(app, ["build"])
+    assert (working_dir / ".cursor" / "rules" / "my-rule.md").exists()
+
+    result = runner.invoke(app, ["clean"])
+
+    assert result.exit_code == 0
+    assert "Cleaned build artifacts" in result.stdout
+    assert not (working_dir / ".cursor" / "rules" / "my-rule.md").exists()
+
+
+def test_clean_nothing_to_clean(working_dir: Path) -> None:
+    """clean command should report nothing when no manifests exist."""
+    result = runner.invoke(app, ["clean"])
+
+    assert result.exit_code == 0
+    assert "Nothing to clean" in result.stdout
+
+
+def test_clean_with_cache_flag(working_dir: Path) -> None:
+    """clean command with --cache should also remove cache directory."""
+    _scaffold_project(working_dir)
+    (working_dir / "prompts" / "rules").mkdir(parents=True, exist_ok=True)
+    (working_dir / "prompts" / "rules" / "my-rule.md").write_text("# My Rule")
+    runner.invoke(app, ["lock"])
+    runner.invoke(app, ["build"])
+    (working_dir / ".promptkit" / "cache" / "plugins").mkdir(parents=True, exist_ok=True)
+
+    result = runner.invoke(app, ["clean", "--cache"])
+
+    assert result.exit_code == 0
+    assert "Cleaned build artifacts and cache" in result.stdout
+    assert not (working_dir / ".promptkit" / "cache").exists()
+
+
 def test_validate_shows_warnings_with_exit_zero(working_dir: Path) -> None:
     """validate command should show warnings but exit 0 when no errors."""
     _scaffold_project(working_dir)

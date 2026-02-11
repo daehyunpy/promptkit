@@ -5,6 +5,7 @@ from pathlib import Path
 import typer
 
 from promptkit.app.build import BuildArtifacts
+from promptkit.app.clean import CleanArtifacts
 from promptkit.app.init import InitProject, InitProjectError
 from promptkit.app.lock import LockPrompts
 from promptkit.app.validate import ValidateConfig
@@ -176,6 +177,30 @@ def validate() -> None:
     if result.is_valid:
         typer.echo("Config is valid")
     else:
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def clean(
+    cache: bool = typer.Option(False, "--cache", help="Also remove the plugin cache"),
+) -> None:
+    """Remove all promptkit-managed build artifacts."""
+    try:
+        cwd = Path.cwd()
+        result = CleanArtifacts().execute(cwd, clean_cache=cache)
+
+        if not result.artifacts_removed and not result.cache_removed:
+            typer.echo("Nothing to clean")
+            return
+
+        if result.artifacts_removed and result.cache_removed:
+            typer.echo("Cleaned build artifacts and cache")
+        elif result.cache_removed:
+            typer.echo("Cleaned cache")
+        else:
+            typer.echo("Cleaned build artifacts")
+    except OSError as e:
+        typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1)
 
 
