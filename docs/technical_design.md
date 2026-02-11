@@ -677,3 +677,9 @@ Post-MVP, we may need AI to adapt prompts between platform formats. If added:
 - `pytest` - Testing framework
 - `ruff` - Linter and formatter
 - `pyright` - Type checker
+
+## Known Issues
+
+1. **Build output collision: needs plugin name prefix** — When two plugins contain files with the same relative path (e.g., both have `skills/code-review/SKILL.md`), the second plugin silently overwrites the first in the build output directory. Builders should prefix output paths with the plugin name (e.g., `skills/my-plugin/code-review/SKILL.md`) to namespace them and prevent collisions.
+
+2. **Skills can be zip files** — Skills in the Claude marketplace can be distributed as `.zip` files. Fetchers and builders need to handle extracting zip-packaged skills alongside the current directory-based format.
