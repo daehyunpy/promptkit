@@ -49,11 +49,11 @@ The `LocalPluginFetcher` SHALL scan `prompts/` for local plugins (single `.md` f
 - **THEN** specs are returned for each: `local/rules/my-rule` and `local/skills/my-skill`
 
 ### Requirement: ClaudeMarketplaceFetcher reads marketplace.json to resolve plugin paths
-The `ClaudeMarketplaceFetcher` SHALL fetch `.claude-plugin/marketplace.json` from the registry repository and use it to resolve the plugin's source path within the repo.
+The `ClaudeMarketplaceFetcher` SHALL read `marketplace.json` from the local git clone directory at `.promptkit/registries/{registry_name}/.claude-plugin/marketplace.json` using filesystem reads. It SHALL NOT use the GitHub Contents API.
 
 #### Scenario: Plugin found in marketplace.json with relative path source
 - **WHEN** `fetch(spec)` is called with `spec.prompt_name` equal to `"code-simplifier"`
-- **AND** `marketplace.json` contains an entry with `"name": "code-simplifier"` and `"source": "./plugins/code-simplifier"`
+- **AND** the local clone contains `.claude-plugin/marketplace.json` with an entry `"name": "code-simplifier"` and `"source": "./plugins/code-simplifier"`
 - **THEN** the fetcher resolves the plugin source path to `plugins/code-simplifier`
 
 #### Scenario: Plugin not found in marketplace.json
@@ -65,55 +65,66 @@ The `ClaudeMarketplaceFetcher` SHALL fetch `.claude-plugin/marketplace.json` fro
 - **AND** `fetch(spec)` is called for that plugin
 - **THEN** a `SyncError` is raised indicating external sources are not yet supported
 
-#### Scenario: marketplace.json fetch fails
-- **WHEN** the HTTP request for `marketplace.json` fails (network error or non-200 status)
-- **THEN** a `SyncError` is raised with a message describing the failure
+#### Scenario: marketplace.json not found in clone
+- **WHEN** the local clone does not contain `.claude-plugin/marketplace.json`
+- **THEN** a `SyncError` is raised with a message describing the missing manifest
 
 ### Requirement: ClaudeMarketplaceFetcher downloads ALL files in plugin directory
-The fetcher SHALL download every file in the plugin directory tree — `.md`, `.json`, scripts, configs, and any other file type — to the cache directory.
+The fetcher SHALL copy all files from the plugin directory in the local git clone to the cache directory, instead of downloading via GitHub Contents API. It SHALL preserve relative directory structure.
 
 #### Scenario: Plugin with mixed file types
-- **WHEN** the plugin directory contains `agents/reviewer.md`, `.claude-plugin/plugin.json`, `hooks/hooks.json`, `scripts/check.sh`
-- **THEN** all 4 files are downloaded to the cache directory preserving their relative paths
+- **WHEN** the plugin directory in the clone contains `agents/reviewer.md`, `.claude-plugin/plugin.json`, `hooks/hooks.json`, `scripts/check.sh`
+- **THEN** all 4 files are copied to the cache directory preserving their relative paths
 - **AND** the returned `Plugin.files` lists all 4 relative paths
 
-#### Scenario: Plugin directory listing fails
-- **WHEN** the GitHub Contents API returns a non-200 status for the plugin directory
+#### Scenario: Plugin directory not found in clone
+- **WHEN** the resolved plugin source path does not exist in the local clone
 - **THEN** a `SyncError` is raised
 
 ### Requirement: ClaudeMarketplaceFetcher handles skills repo structure
-The fetcher SHALL support the skills repo structure where plugins declare a `skills` array in `marketplace.json` pointing to skill directories.
+The fetcher SHALL support the skills repo structure by copying skill directories from the local clone instead of downloading via GitHub Contents API.
 
 #### Scenario: Plugin with skills array
 - **WHEN** `marketplace.json` contains an entry with `"source": "./"` and `"skills": ["./skills/xlsx", "./skills/docx"]`
-- **THEN** the fetcher downloads all files from each listed skill directory
+- **THEN** the fetcher copies all files from each listed skill directory in the clone
 - **AND** the `Plugin.files` includes paths like `skills/xlsx/SKILL.md`, `skills/xlsx/scripts/processor.py`, `skills/docx/SKILL.md`
 
 ### Requirement: ClaudeMarketplaceFetcher retrieves commit SHA for cache key
-The fetcher SHALL get the latest commit SHA from the GitHub API to use as the cache directory key.
+The fetcher SHALL get the commit SHA from the local git clone using `GitRegistryClone.get_commit_sha()` instead of the GitHub Commits API.
 
-#### Scenario: Commit SHA retrieved
-- **WHEN** the fetcher queries the GitHub API for the default branch
-- **THEN** the latest commit SHA is used as part of the cache path `{registry}/{plugin}/{sha}/`
+#### Scenario: Commit SHA retrieved from local clone
+- **WHEN** the fetcher queries the local clone for the HEAD commit
+- **THEN** the commit SHA from `git rev-parse HEAD` is used as part of the cache path `{registry}/{plugin}/{sha}/`
 - **AND** the returned `Plugin.commit_sha` matches
 
 ### Requirement: ClaudeMarketplaceFetcher parses GitHub repository URL
-The fetcher SHALL extract `owner` and `repo` from the registry URL to construct API requests.
+The fetcher SHALL extract `owner` and `repo` from the registry URL to construct the git clone URL.
 
 #### Scenario: Standard GitHub URL
 - **WHEN** constructed with `registry_url="https://github.com/anthropics/claude-plugins-official"`
-- **THEN** API requests target `api.github.com/repos/anthropics/claude-plugins-official/...`
+- **THEN** the clone URL is `https://github.com/anthropics/claude-plugins-official.git`
 
 #### Scenario: Invalid URL format
 - **WHEN** constructed with a URL that does not match `https://github.com/{owner}/{repo}`
 - **THEN** a `SyncError` is raised at construction time
 
-### Requirement: ClaudeMarketplaceFetcher accepts injectable httpx.Client
-The fetcher SHALL accept an optional `httpx.Client` parameter for testability.
+### Requirement: ClaudeMarketplaceFetcher ensures clone is up to date before fetching
+The fetcher SHALL call `GitRegistryClone.ensure_up_to_date()` before reading any files from the clone, ensuring the local clone reflects the latest remote state.
 
-#### Scenario: Custom client provided
-- **WHEN** constructed with `client=mock_client`
-- **THEN** all HTTP requests use the provided client
+#### Scenario: First fetch triggers clone
+- **WHEN** `fetch(spec)` is called and no local clone exists
+- **THEN** `GitRegistryClone.ensure_up_to_date()` clones the repository before proceeding
+
+#### Scenario: Subsequent fetch triggers pull
+- **WHEN** `fetch(spec)` is called and a local clone already exists
+- **THEN** `GitRegistryClone.ensure_up_to_date()` pulls the latest changes before proceeding
+
+### Requirement: ClaudeMarketplaceFetcher accepts injectable GitRegistryClone
+The fetcher SHALL accept a `GitRegistryClone` parameter for testability, replacing the previous `httpx.Client` injection.
+
+#### Scenario: Custom clone provided
+- **WHEN** constructed with `clone=mock_clone`
+- **THEN** all git operations use the provided clone object
 
 ### Requirement: PluginCache manages directory-based plugin storage
 The `PluginCache` SHALL provide methods to check if a plugin version is cached, get the cache path for a plugin version, and list cached files.
