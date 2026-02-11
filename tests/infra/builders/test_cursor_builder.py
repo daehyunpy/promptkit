@@ -128,9 +128,9 @@ class TestCategoryFiltering:
         assert (output_dir / "skills-cursor" / "my-skill" / "SKILL.md").exists()
         assert (output_dir / "rules" / "my-rule.md").exists()
         assert (output_dir / "scripts" / "check.sh").exists()
-        assert not (output_dir / "agents").exists()
-        assert not (output_dir / "commands").exists()
-        assert not (output_dir / "hooks").exists()
+        assert (output_dir / "agents" / "reviewer.md").exists()
+        assert (output_dir / "commands" / "my-cmd.md").exists()
+        assert (output_dir / "hooks" / "hooks.json").exists()
         assert not (output_dir / "README.md").exists()
         assert not (output_dir / ".claude-plugin").exists()
 
@@ -234,15 +234,17 @@ class TestReturnPaths:
             source_dir,
             {
                 "rules/a.md": "A",
-                "agents/b.md": "B",  # skipped
+                "agents/b.md": "B",
                 "skills/c/SKILL.md": "C",
+                "README.md": "skip",  # skipped
             },
         )
 
         paths = builder.build([plugin], output_dir, project_dir)
 
-        assert len(paths) == 2
+        assert len(paths) == 3
         assert output_dir / "rules" / "a.md" in paths
+        assert output_dir / "agents" / "b.md" in paths
         assert output_dir / "skills-cursor" / "c" / "SKILL.md" in paths
 
 

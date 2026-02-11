@@ -1,22 +1,18 @@
 ## ADDED Requirements
 
 ### Requirement: CursorBuilder copies only allowed category files with directory mapping
-The `CursorBuilder` SHALL implement the `ArtifactBuilder` protocol and copy only files under allowed category directories to `.cursor/`. The allowed categories are: `skills`, `rules`, `scripts`. Files outside these categories (e.g., `agents/`, `commands/`, `hooks/`, `README.md`, `.claude-plugin/`) SHALL be skipped. The `skills/` directory is mapped to `skills-cursor/` in the output.
+The `CursorBuilder` SHALL implement the `ArtifactBuilder` protocol and copy only files under allowed category directories to `.cursor/`. The allowed categories are: `commands`, `agents`, `skills`, `hooks`, `scripts`, `rules`. Files outside these categories (e.g., `README.md`, `.claude-plugin/`) SHALL be skipped. The `skills/` directory is mapped to `skills-cursor/` in the output.
 
-#### Scenario: Copy and map skills to skills-cursor
+#### Scenario: Copy files in allowed categories
+- **WHEN** a plugin contains files in `commands/`, `agents/`, `skills/`, `hooks/`, `scripts/`, and `rules/`
+- **THEN** all files under those directories are copied to the output directory
+
+#### Scenario: Map skills to skills-cursor
 - **WHEN** a plugin contains files in `skills/`
 - **THEN** those files are copied to `<output_dir>/skills-cursor/`
 
-#### Scenario: Copy rules without mapping
-- **WHEN** a plugin contains files in `rules/`
-- **THEN** those files are copied to `<output_dir>/rules/`
-
-#### Scenario: Copy scripts without mapping
-- **WHEN** a plugin contains files in `scripts/`
-- **THEN** those files are copied to `<output_dir>/scripts/`
-
-#### Scenario: Skip non-allowed categories
-- **WHEN** a plugin contains files in `agents/`, `commands/`, `hooks/`, `README.md`, or `.claude-plugin/`
+#### Scenario: Skip files outside allowed categories
+- **WHEN** a plugin contains `README.md` and `.claude-plugin/plugin.json`
 - **THEN** those files are not copied to the output directory
 
 #### Scenario: Skip flat files with no category

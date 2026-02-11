@@ -12,7 +12,7 @@ from promptkit.infra.builders.manifest import (
     write_manifest,
 )
 
-ALLOWED_CATEGORIES = {"skills", "rules", "scripts"}
+ALLOWED_CATEGORIES = {"commands", "agents", "skills", "hooks", "scripts", "rules"}
 
 CATEGORY_MAPPING: dict[str, str] = {
     "skills": "skills-cursor",
@@ -25,8 +25,8 @@ class CursorBuilder:
     """Builds .cursor/ artifacts by copying plugin file trees.
 
     Implements the ArtifactBuilder protocol. Applies directory mapping
-    (skills → skills-cursor) and skips unsupported categories (agents,
-    commands, hooks). Uses manifest-based cleanup to preserve non-promptkit files.
+    (skills → skills-cursor). Uses manifest-based cleanup to preserve
+    non-promptkit files.
     """
 
     def __init__(self, file_system: FileSystem, /) -> None:
