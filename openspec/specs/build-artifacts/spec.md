@@ -36,12 +36,13 @@ The `BuildArtifacts` use case SHALL filter prompts using `Prompt.is_valid_for_pl
 - **THEN** it is included in both the `CursorBuilder` and `ClaudeBuilder` builds
 
 ### Requirement: BuildArtifacts delegates to platform builders
-The `BuildArtifacts` use case SHALL delegate artifact generation to each configured platform builder.
+The `BuildArtifacts` use case SHALL delegate artifact generation to each configured platform builder. Builders are responsible for their own cleanup strategy (manifest-based scoped cleanup).
 
 #### Scenario: Build for multiple platforms
 - **WHEN** config defines both `cursor` and `claude-code` platforms
 - **THEN** `CursorBuilder.build()` is called with cursor-targeted prompts
 - **AND** `ClaudeBuilder.build()` is called with claude-code-targeted prompts
+- **AND** each builder manages its own cleanup via `.promptkit/managed/`
 
 #### Scenario: Build for single platform
 - **WHEN** config defines only `cursor` platform

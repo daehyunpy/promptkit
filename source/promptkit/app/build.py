@@ -59,7 +59,7 @@ class BuildArtifacts:
                 if p.spec.targets_platform(platform_config.platform_type)
             ]
             output_dir = project_dir / platform_config.output_dir
-            builder.build(filtered, output_dir)
+            builder.build(filtered, output_dir, project_dir)
 
     def _resolve_plugin(
         self,

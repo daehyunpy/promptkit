@@ -34,10 +34,13 @@ class ArtifactBuilder(Protocol):
         """The platform this builder targets."""
         ...
 
-    def build(self, plugins: list[Plugin], output_dir: Path, /) -> list[Path]:
+    def build(
+        self, plugins: list[Plugin], output_dir: Path, project_dir: Path, /
+    ) -> list[Path]:
         """Build platform-specific artifacts from plugins.
 
         Copies file trees from each plugin's source_dir to the output directory.
+        Uses project_dir to read/write the build manifest for scoped cleanup.
         Returns list of paths to generated artifact files.
         """
         ...

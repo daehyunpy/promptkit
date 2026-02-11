@@ -8,6 +8,7 @@ from promptkit.domain.platform_target import PlatformTarget
 from promptkit.domain.plugin import Plugin
 from promptkit.domain.prompt_spec import PromptSpec
 from promptkit.infra.builders.cursor_builder import CursorBuilder
+from promptkit.infra.builders.manifest import MANAGED_DIR, read_manifest
 from promptkit.infra.file_system.local import FileSystem
 
 
@@ -23,6 +24,11 @@ def output_dir(tmp_path: Path) -> Path:
     d = tmp_path / ".cursor"
     d.mkdir()
     return d
+
+
+@pytest.fixture
+def project_dir(tmp_path: Path) -> Path:
+    return tmp_path
 
 
 @pytest.fixture
@@ -49,7 +55,11 @@ def _make_plugin(
 
 class TestDirectoryMapping:
     def test_maps_skills_to_skills_cursor(
-        self, builder: CursorBuilder, source_dir: Path, output_dir: Path
+        self,
+        builder: CursorBuilder,
+        source_dir: Path,
+        output_dir: Path,
+        project_dir: Path,
     ) -> None:
         plugin = _make_plugin(
             source_dir,
@@ -58,34 +68,46 @@ class TestDirectoryMapping:
             },
         )
 
-        builder.build([plugin], output_dir)
+        builder.build([plugin], output_dir, project_dir)
 
         assert (
             output_dir / "skills-cursor" / "my-skill" / "SKILL.md"
         ).read_text() == "# Skill"
 
     def test_preserves_rules(
-        self, builder: CursorBuilder, source_dir: Path, output_dir: Path
+        self,
+        builder: CursorBuilder,
+        source_dir: Path,
+        output_dir: Path,
+        project_dir: Path,
     ) -> None:
         plugin = _make_plugin(source_dir, {"rules/my-rule.md": "# Rule"})
 
-        builder.build([plugin], output_dir)
+        builder.build([plugin], output_dir, project_dir)
 
         assert (output_dir / "rules" / "my-rule.md").read_text() == "# Rule"
 
     def test_passes_through_unknown_categories(
-        self, builder: CursorBuilder, source_dir: Path, output_dir: Path
+        self,
+        builder: CursorBuilder,
+        source_dir: Path,
+        output_dir: Path,
+        project_dir: Path,
     ) -> None:
         plugin = _make_plugin(source_dir, {"scripts/check.sh": "#!/bin/bash"})
 
-        builder.build([plugin], output_dir)
+        builder.build([plugin], output_dir, project_dir)
 
         assert (output_dir / "scripts" / "check.sh").read_text() == "#!/bin/bash"
 
 
 class TestCategoryFiltering:
     def test_skips_agents(
-        self, builder: CursorBuilder, source_dir: Path, output_dir: Path
+        self,
+        builder: CursorBuilder,
+        source_dir: Path,
+        output_dir: Path,
+        project_dir: Path,
     ) -> None:
         plugin = _make_plugin(
             source_dir,
@@ -95,13 +117,17 @@ class TestCategoryFiltering:
             },
         )
 
-        builder.build([plugin], output_dir)
+        builder.build([plugin], output_dir, project_dir)
 
         assert not (output_dir / "agents").exists()
         assert (output_dir / "rules" / "my-rule.md").exists()
 
     def test_skips_commands(
-        self, builder: CursorBuilder, source_dir: Path, output_dir: Path
+        self,
+        builder: CursorBuilder,
+        source_dir: Path,
+        output_dir: Path,
+        project_dir: Path,
     ) -> None:
         plugin = _make_plugin(
             source_dir,
@@ -111,13 +137,17 @@ class TestCategoryFiltering:
             },
         )
 
-        builder.build([plugin], output_dir)
+        builder.build([plugin], output_dir, project_dir)
 
         assert not (output_dir / "commands").exists()
         assert (output_dir / "rules" / "my-rule.md").exists()
 
     def test_skips_hooks(
-        self, builder: CursorBuilder, source_dir: Path, output_dir: Path
+        self,
+        builder: CursorBuilder,
+        source_dir: Path,
+        output_dir: Path,
+        project_dir: Path,
     ) -> None:
         plugin = _make_plugin(
             source_dir,
@@ -127,30 +157,89 @@ class TestCategoryFiltering:
             },
         )
 
-        builder.build([plugin], output_dir)
+        builder.build([plugin], output_dir, project_dir)
 
         assert not (output_dir / "hooks").exists()
         assert (output_dir / "rules" / "my-rule.md").exists()
 
 
-class TestCleanBeforeWrite:
-    def test_removes_stale_artifacts(
-        self, builder: CursorBuilder, source_dir: Path, output_dir: Path
+class TestManifestCleanup:
+    def test_removes_stale_managed_files(
+        self,
+        builder: CursorBuilder,
+        source_dir: Path,
+        output_dir: Path,
+        project_dir: Path,
     ) -> None:
+        """Previously managed files are removed on rebuild."""
         stale = output_dir / "old" / "stale.md"
         stale.parent.mkdir(parents=True)
         stale.write_text("stale")
 
+        (project_dir / MANAGED_DIR).mkdir(parents=True)
+        (project_dir / MANAGED_DIR / "cursor.txt").write_text("old/stale.md\n")
+
         plugin = _make_plugin(source_dir, {"rules/new.md": "# New"})
-        builder.build([plugin], output_dir)
+        builder.build([plugin], output_dir, project_dir)
 
         assert not stale.exists()
         assert (output_dir / "rules" / "new.md").exists()
 
+    def test_preserves_non_managed_files(
+        self,
+        builder: CursorBuilder,
+        source_dir: Path,
+        output_dir: Path,
+        project_dir: Path,
+    ) -> None:
+        """Files not in the manifest survive a rebuild."""
+        (output_dir / "settings.json").write_text("{}")
+
+        plugin = _make_plugin(source_dir, {"rules/my-rule.md": "# Rule"})
+        builder.build([plugin], output_dir, project_dir)
+
+        assert (output_dir / "settings.json").read_text() == "{}"
+        assert (output_dir / "rules" / "my-rule.md").exists()
+
+    def test_first_build_without_manifest_is_additive(
+        self,
+        builder: CursorBuilder,
+        source_dir: Path,
+        output_dir: Path,
+        project_dir: Path,
+    ) -> None:
+        """First build creates manifest without removing anything."""
+        (output_dir / "existing.md").write_text("existing")
+
+        plugin = _make_plugin(source_dir, {"rules/new.md": "# New"})
+        builder.build([plugin], output_dir, project_dir)
+
+        assert (output_dir / "existing.md").read_text() == "existing"
+        assert (output_dir / "rules" / "new.md").exists()
+        assert read_manifest(project_dir, "cursor") == ["rules/new.md"]
+
+    def test_manifest_records_mapped_paths(
+        self,
+        builder: CursorBuilder,
+        source_dir: Path,
+        output_dir: Path,
+        project_dir: Path,
+    ) -> None:
+        """Manifest should contain mapped paths (skills-cursor), not source paths."""
+        plugin = _make_plugin(source_dir, {"skills/my-skill/SKILL.md": "# Skill"})
+        builder.build([plugin], output_dir, project_dir)
+
+        manifest = read_manifest(project_dir, "cursor")
+        assert "skills-cursor/my-skill/SKILL.md" in manifest
+
 
 class TestReturnPaths:
     def test_returns_only_copied_paths(
-        self, builder: CursorBuilder, source_dir: Path, output_dir: Path
+        self,
+        builder: CursorBuilder,
+        source_dir: Path,
+        output_dir: Path,
+        project_dir: Path,
     ) -> None:
         plugin = _make_plugin(
             source_dir,
@@ -161,7 +250,7 @@ class TestReturnPaths:
             },
         )
 
-        paths = builder.build([plugin], output_dir)
+        paths = builder.build([plugin], output_dir, project_dir)
 
         assert len(paths) == 2
         assert output_dir / "rules" / "a.md" in paths
@@ -170,11 +259,15 @@ class TestReturnPaths:
 
 class TestFlatFiles:
     def test_copies_flat_files_directly(
-        self, builder: CursorBuilder, source_dir: Path, output_dir: Path
+        self,
+        builder: CursorBuilder,
+        source_dir: Path,
+        output_dir: Path,
+        project_dir: Path,
     ) -> None:
         plugin = _make_plugin(source_dir, {"my-rule.md": "# Rule"})
 
-        builder.build([plugin], output_dir)
+        builder.build([plugin], output_dir, project_dir)
 
         assert (output_dir / "my-rule.md").read_text() == "# Rule"
 

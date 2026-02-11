@@ -6,6 +6,11 @@ from pathlib import Path
 from promptkit.domain.file_system import FileSystem
 from promptkit.domain.platform_target import PlatformTarget
 from promptkit.domain.plugin import Plugin
+from promptkit.infra.builders.manifest import (
+    cleanup_managed_files,
+    read_manifest,
+    write_manifest,
+)
 
 CATEGORY_MAPPING: dict[str, str] = {
     "skills": "skills-cursor",
@@ -13,13 +18,15 @@ CATEGORY_MAPPING: dict[str, str] = {
 
 SKIPPED_CATEGORIES = {"agents", "commands", "hooks"}
 
+PLATFORM_NAME = "cursor"
+
 
 class CursorBuilder:
     """Builds .cursor/ artifacts by copying plugin file trees.
 
     Implements the ArtifactBuilder protocol. Applies directory mapping
     (skills → skills-cursor) and skips unsupported categories (agents,
-    commands, hooks).
+    commands, hooks). Uses manifest-based cleanup to preserve non-promptkit files.
     """
 
     def __init__(self, file_system: FileSystem, /) -> None:
@@ -29,10 +36,16 @@ class CursorBuilder:
     def platform(self) -> PlatformTarget:
         return PlatformTarget.CURSOR
 
-    def build(self, plugins: list[Plugin], output_dir: Path, /) -> list[Path]:
+    def build(
+        self, plugins: list[Plugin], output_dir: Path, project_dir: Path, /
+    ) -> list[Path]:
         """Copy plugin file trees to the Cursor output directory."""
-        self._fs.remove_directory(output_dir)
+        previous = read_manifest(project_dir, PLATFORM_NAME)
+        cleanup_managed_files(output_dir, previous)
+
         generated: list[Path] = []
+        relative_paths: list[str] = []
+
         for plugin in plugins:
             for file_path in plugin.files:
                 mapped = self._map_path(file_path)
@@ -43,6 +56,9 @@ class CursorBuilder:
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
                 generated.append(dst)
+                relative_paths.append(mapped)
+
+        write_manifest(project_dir, PLATFORM_NAME, relative_paths)
         return generated
 
     @staticmethod

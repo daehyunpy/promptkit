@@ -35,13 +35,15 @@ The `ClaudeBuilder` SHALL write prompt content as-is, with no content transforma
 - **THEN** the output file contains the exact same content as the input
 
 ### Requirement: ClaudeBuilder cleans output directory before writing
-The `ClaudeBuilder` SHALL remove all existing artifacts from its output directory before writing new ones.
+The `ClaudeBuilder` SHALL remove only previously promptkit-managed files (listed in `.promptkit/managed/`) before writing new artifacts, instead of removing the entire output directory. Non-managed files SHALL be preserved.
 
-#### Scenario: Stale artifacts are removed
-- **WHEN** the output directory contains artifacts from a previous build
+#### Scenario: Stale artifacts are removed, non-managed files preserved
+- **WHEN** the output directory contains artifacts from a previous build listed in `.promptkit/managed/`
+- **AND** the output directory contains non-managed files (e.g., `settings.json`, `skills/openspec-apply/SKILL.md`)
 - **AND** the builder writes new artifacts
-- **THEN** the previous artifacts are removed
-- **AND** only the new artifacts exist in the output directory
+- **THEN** the previous managed artifacts are removed
+- **AND** the non-managed files are preserved
+- **AND** only the new artifacts and non-managed files exist in the output directory
 
 ### Requirement: ClaudeBuilder reports its platform
 The `ClaudeBuilder` SHALL expose `PlatformTarget.CLAUDE_CODE` as its platform.

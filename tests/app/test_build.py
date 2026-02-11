@@ -44,7 +44,9 @@ class FakeBuilder:
     def platform(self) -> PlatformTarget:
         return self._platform
 
-    def build(self, plugins: list[Plugin], output_dir: Path, /) -> list[Path]:
+    def build(
+        self, plugins: list[Plugin], output_dir: Path, project_dir: Path, /
+    ) -> list[Path]:
         self.built_plugins = list(plugins)
         self.built_output_dir = output_dir
         return []
