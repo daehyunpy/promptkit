@@ -12,7 +12,6 @@ from promptkit.infra.builders.manifest import (
     write_manifest,
 )
 
-# TODO: add "hooks", "scripts", "mcp" when platform support is adapted
 ALLOWED_CATEGORIES = {"commands", "agents", "skills", "rules"}
 
 PLATFORM_NAME = "cursor"

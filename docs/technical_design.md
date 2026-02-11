@@ -683,3 +683,5 @@ Post-MVP, we may need AI to adapt prompts between platform formats. If added:
 1. **Build output collision: needs plugin name prefix** — When two plugins contain files with the same relative path (e.g., both have `skills/code-review/SKILL.md`), the second plugin silently overwrites the first in the build output directory. Builders should prefix output paths with the plugin name (e.g., `skills/my-plugin/code-review/SKILL.md`) to namespace them and prevent collisions.
 
 2. **Skills can be zip files** — Skills in the Claude marketplace can be distributed as `.zip` files. Fetchers and builders need to handle extracting zip-packaged skills alongside the current directory-based format.
+
+3. **Hooks, scripts, and MCP not yet supported in builders** — Builders currently allow only `commands`, `agents`, `skills`, and `rules` categories. Support for `hooks`, `scripts`, and `mcp` should be adapted in a future phase.
