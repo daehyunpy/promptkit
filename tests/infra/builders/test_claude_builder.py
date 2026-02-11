@@ -54,20 +54,7 @@ def _make_plugin(
 
 
 class TestFileCopying:
-    def test_copies_single_md_file(
-        self,
-        builder: ClaudeBuilder,
-        source_dir: Path,
-        output_dir: Path,
-        project_dir: Path,
-    ) -> None:
-        plugin = _make_plugin(source_dir, {"my-rule.md": "# Rule"})
-
-        builder.build([plugin], output_dir, project_dir)
-
-        assert (output_dir / "my-rule.md").read_text() == "# Rule"
-
-    def test_copies_multi_file_plugin(
+    def test_copies_files_in_allowed_categories(
         self,
         builder: ClaudeBuilder,
         source_dir: Path,
@@ -78,6 +65,8 @@ class TestFileCopying:
             source_dir,
             {
                 "agents/reviewer.md": "# Reviewer",
+                "commands/run.md": "# Run",
+                "skills/xlsx/SKILL.md": "# XLSX",
                 "hooks/hooks.json": '{"hooks": []}',
                 "scripts/check.sh": "#!/bin/bash",
             },
@@ -86,10 +75,12 @@ class TestFileCopying:
         builder.build([plugin], output_dir, project_dir)
 
         assert (output_dir / "agents" / "reviewer.md").read_text() == "# Reviewer"
+        assert (output_dir / "commands" / "run.md").read_text() == "# Run"
+        assert (output_dir / "skills" / "xlsx" / "SKILL.md").read_text() == "# XLSX"
         assert (output_dir / "hooks" / "hooks.json").read_text() == '{"hooks": []}'
         assert (output_dir / "scripts" / "check.sh").read_text() == "#!/bin/bash"
 
-    def test_preserves_directory_structure(
+    def test_preserves_nested_directory_structure(
         self,
         builder: ClaudeBuilder,
         source_dir: Path,
@@ -112,6 +103,51 @@ class TestFileCopying:
         ).read_text() == "import xlsx"
 
 
+class TestCategoryFiltering:
+    def test_skips_files_outside_allowed_categories(
+        self,
+        builder: ClaudeBuilder,
+        source_dir: Path,
+        output_dir: Path,
+        project_dir: Path,
+    ) -> None:
+        plugin = _make_plugin(
+            source_dir,
+            {
+                "README.md": "# Readme",
+                ".claude-plugin/plugin.json": '{"name": "test"}',
+                "commands/run.md": "# Run",
+            },
+        )
+
+        builder.build([plugin], output_dir, project_dir)
+
+        assert not (output_dir / "README.md").exists()
+        assert not (output_dir / ".claude-plugin").exists()
+        assert (output_dir / "commands" / "run.md").exists()
+
+    def test_manifest_only_includes_allowed_files(
+        self,
+        builder: ClaudeBuilder,
+        source_dir: Path,
+        output_dir: Path,
+        project_dir: Path,
+    ) -> None:
+        plugin = _make_plugin(
+            source_dir,
+            {
+                "README.md": "# Readme",
+                ".claude-plugin/plugin.json": '{}',
+                "commands/run.md": "# Run",
+            },
+        )
+
+        builder.build([plugin], output_dir, project_dir)
+
+        manifest = read_manifest(project_dir, "claude")
+        assert manifest == ["commands/run.md"]
+
+
 class TestManifestCleanup:
     def test_removes_stale_managed_files(
         self,
@@ -129,11 +165,11 @@ class TestManifestCleanup:
         (project_dir / MANAGED_DIR).mkdir(parents=True)
         (project_dir / MANAGED_DIR / "claude.txt").write_text("old/stale.md\n")
 
-        plugin = _make_plugin(source_dir, {"new.md": "# New"})
+        plugin = _make_plugin(source_dir, {"commands/new.md": "# New"})
         builder.build([plugin], output_dir, project_dir)
 
         assert not stale.exists()
-        assert (output_dir / "new.md").exists()
+        assert (output_dir / "commands" / "new.md").exists()
 
     def test_preserves_non_managed_files(
         self,
@@ -147,14 +183,14 @@ class TestManifestCleanup:
         (output_dir / "skills" / "openspec-apply").mkdir(parents=True)
         (output_dir / "skills" / "openspec-apply" / "SKILL.md").write_text("# OpenSpec")
 
-        plugin = _make_plugin(source_dir, {"rules/my-rule.md": "# Rule"})
+        plugin = _make_plugin(source_dir, {"commands/my-cmd.md": "# Cmd"})
         builder.build([plugin], output_dir, project_dir)
 
         assert (output_dir / "settings.json").read_text() == '{"key": "value"}'
         assert (
             output_dir / "skills" / "openspec-apply" / "SKILL.md"
         ).read_text() == "# OpenSpec"
-        assert (output_dir / "rules" / "my-rule.md").exists()
+        assert (output_dir / "commands" / "my-cmd.md").exists()
 
     def test_first_build_without_manifest_is_additive(
         self,
@@ -166,12 +202,12 @@ class TestManifestCleanup:
         """First build creates manifest without removing anything."""
         (output_dir / "existing.md").write_text("existing")
 
-        plugin = _make_plugin(source_dir, {"new.md": "# New"})
+        plugin = _make_plugin(source_dir, {"commands/new.md": "# New"})
         builder.build([plugin], output_dir, project_dir)
 
         assert (output_dir / "existing.md").read_text() == "existing"
-        assert (output_dir / "new.md").exists()
-        assert read_manifest(project_dir, "claude") == ["new.md"]
+        assert (output_dir / "commands" / "new.md").exists()
+        assert read_manifest(project_dir, "claude") == ["commands/new.md"]
 
     def test_writes_manifest_after_build(
         self,

@@ -105,30 +105,41 @@ class TestLockFileRequired:
 class TestBuildLocalPlugin:
     def test_builds_local_single_file(self, project_dir: Path) -> None:
         (project_dir / "promptkit.yaml").write_text(CONFIG_BOTH_PLATFORMS)
-        (project_dir / "prompts" / "my-rule.md").write_text("# My Rule")
+        (project_dir / "prompts" / "rules").mkdir()
+        (project_dir / "prompts" / "rules" / "my-rule.md").write_text("# My Rule")
         _write_lock(
             project_dir,
             [
-                {"name": "my-rule", "source": "local/my-rule", "hash": "sha256:abc"},
+                {
+                    "name": "my-rule",
+                    "source": "local/rules/my-rule",
+                    "hash": "sha256:abc",
+                },
             ],
         )
         use_case = _make_build(project_dir)
 
         use_case.execute(project_dir)
 
-        assert (project_dir / ".claude" / "my-rule.md").read_text() == "# My Rule"
+        assert (
+            project_dir / ".claude" / "rules" / "my-rule.md"
+        ).read_text() == "# My Rule"
 
     def test_builds_local_directory_plugin(self, project_dir: Path) -> None:
         (project_dir / "promptkit.yaml").write_text(CONFIG_BOTH_PLATFORMS)
-        skill_dir = project_dir / "prompts" / "my-skill"
-        skill_dir.mkdir()
+        skill_dir = project_dir / "prompts" / "skills" / "my-skill"
+        skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text("# Skill")
         (skill_dir / "scripts").mkdir()
         (skill_dir / "scripts" / "check.sh").write_text("#!/bin/bash")
         _write_lock(
             project_dir,
             [
-                {"name": "my-skill", "source": "local/my-skill", "hash": "sha256:abc"},
+                {
+                    "name": "my-skill",
+                    "source": "local/skills/my-skill",
+                    "hash": "sha256:abc",
+                },
             ],
         )
         use_case = _make_build(project_dir)
@@ -136,10 +147,10 @@ class TestBuildLocalPlugin:
         use_case.execute(project_dir)
 
         assert (
-            project_dir / ".claude" / "my-skill" / "SKILL.md"
+            project_dir / ".claude" / "skills" / "my-skill" / "SKILL.md"
         ).read_text() == "# Skill"
         assert (
-            project_dir / ".claude" / "my-skill" / "scripts" / "check.sh"
+            project_dir / ".claude" / "skills" / "my-skill" / "scripts" / "check.sh"
         ).read_text() == "#!/bin/bash"
 
 
@@ -254,11 +265,16 @@ platforms:
 class TestBuilderDelegation:
     def test_delegates_to_each_platform_builder(self, project_dir: Path) -> None:
         (project_dir / "promptkit.yaml").write_text(CONFIG_BOTH_PLATFORMS)
-        (project_dir / "prompts" / "my-rule.md").write_text("# Rule")
+        (project_dir / "prompts" / "rules").mkdir()
+        (project_dir / "prompts" / "rules" / "my-rule.md").write_text("# Rule")
         _write_lock(
             project_dir,
             [
-                {"name": "my-rule", "source": "local/my-rule", "hash": "sha256:abc"},
+                {
+                    "name": "my-rule",
+                    "source": "local/rules/my-rule",
+                    "hash": "sha256:abc",
+                },
             ],
         )
 
@@ -281,11 +297,16 @@ class TestBuilderDelegation:
 
     def test_builds_for_single_platform(self, project_dir: Path) -> None:
         (project_dir / "promptkit.yaml").write_text(CONFIG_CURSOR_ONLY)
-        (project_dir / "prompts" / "my-rule.md").write_text("# Rule")
+        (project_dir / "prompts" / "rules").mkdir()
+        (project_dir / "prompts" / "rules" / "my-rule.md").write_text("# Rule")
         _write_lock(
             project_dir,
             [
-                {"name": "my-rule", "source": "local/my-rule", "hash": "sha256:abc"},
+                {
+                    "name": "my-rule",
+                    "source": "local/rules/my-rule",
+                    "hash": "sha256:abc",
+                },
             ],
         )
 

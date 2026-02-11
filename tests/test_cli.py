@@ -115,7 +115,8 @@ def test_lock_command_shows_in_help() -> None:
 def test_lock_succeeds_with_local_prompts(working_dir: Path) -> None:
     """lock command should lock local prompts and update lock file."""
     _scaffold_project(working_dir)
-    (working_dir / "prompts" / "my-rule.md").write_text("# My Rule")
+    (working_dir / "prompts" / "rules").mkdir(parents=True, exist_ok=True)
+    (working_dir / "prompts" / "rules" / "my-rule.md").write_text("# My Rule")
 
     result = runner.invoke(app, ["lock"])
 
@@ -123,7 +124,7 @@ def test_lock_succeeds_with_local_prompts(working_dir: Path) -> None:
     assert "Locked" in result.stdout
     lock_content = yaml.safe_load((working_dir / "promptkit.lock").read_text())
     assert len(lock_content["prompts"]) == 1
-    assert lock_content["prompts"][0]["source"] == "local/my-rule"
+    assert lock_content["prompts"][0]["source"] == "local/rules/my-rule"
 
 
 def test_lock_fails_without_config(working_dir: Path) -> None:
@@ -158,7 +159,8 @@ def test_build_command_shows_in_help() -> None:
 def test_build_succeeds_with_local_prompts(working_dir: Path) -> None:
     """build command should generate artifacts from locked local prompts."""
     _scaffold_project(working_dir)
-    (working_dir / "prompts" / "my-rule.md").write_text("# My Rule")
+    (working_dir / "prompts" / "rules").mkdir(parents=True, exist_ok=True)
+    (working_dir / "prompts" / "rules" / "my-rule.md").write_text("# My Rule")
     # Lock first (lock-first workflow)
     runner.invoke(app, ["lock"])
 
@@ -166,8 +168,8 @@ def test_build_succeeds_with_local_prompts(working_dir: Path) -> None:
 
     assert result.exit_code == 0
     assert "Built" in result.stdout
-    assert (working_dir / ".cursor" / "my-rule.md").exists()
-    assert (working_dir / ".claude" / "my-rule.md").exists()
+    assert (working_dir / ".cursor" / "rules" / "my-rule.md").exists()
+    assert (working_dir / ".claude" / "rules" / "my-rule.md").exists()
 
 
 def test_build_fails_without_lock_file(working_dir: Path) -> None:
@@ -202,7 +204,8 @@ def test_sync_command_shows_in_help() -> None:
 def test_sync_succeeds_with_local_prompts(working_dir: Path) -> None:
     """sync command should lock and build local prompts in one step."""
     _scaffold_project(working_dir)
-    (working_dir / "prompts" / "my-rule.md").write_text("# My Rule")
+    (working_dir / "prompts" / "rules").mkdir(parents=True, exist_ok=True)
+    (working_dir / "prompts" / "rules" / "my-rule.md").write_text("# My Rule")
 
     result = runner.invoke(app, ["sync"])
 
@@ -210,10 +213,10 @@ def test_sync_succeeds_with_local_prompts(working_dir: Path) -> None:
     # Lock file should be updated
     lock_content = yaml.safe_load((working_dir / "promptkit.lock").read_text())
     assert len(lock_content["prompts"]) == 1
-    assert lock_content["prompts"][0]["source"] == "local/my-rule"
+    assert lock_content["prompts"][0]["source"] == "local/rules/my-rule"
     # Artifacts should be generated
-    assert (working_dir / ".cursor" / "my-rule.md").exists()
-    assert (working_dir / ".claude" / "my-rule.md").exists()
+    assert (working_dir / ".cursor" / "rules" / "my-rule.md").exists()
+    assert (working_dir / ".claude" / "rules" / "my-rule.md").exists()
 
 
 def test_sync_fails_without_config(working_dir: Path) -> None:
@@ -245,7 +248,8 @@ def test_validate_command_shows_in_help() -> None:
 def test_validate_succeeds_with_valid_config(working_dir: Path) -> None:
     """validate command should exit 0 for a valid, locked config."""
     _scaffold_project(working_dir)
-    (working_dir / "prompts" / "my-rule.md").write_text("# My Rule")
+    (working_dir / "prompts" / "rules").mkdir(parents=True, exist_ok=True)
+    (working_dir / "prompts" / "rules" / "my-rule.md").write_text("# My Rule")
     runner.invoke(app, ["lock"])
 
     result = runner.invoke(app, ["validate"])
@@ -276,7 +280,8 @@ def test_validate_fails_without_config(working_dir: Path) -> None:
 def test_validate_shows_warnings_with_exit_zero(working_dir: Path) -> None:
     """validate command should show warnings but exit 0 when no errors."""
     _scaffold_project(working_dir)
-    (working_dir / "prompts" / "my-rule.md").write_text("# My Rule")
+    (working_dir / "prompts" / "rules").mkdir(parents=True, exist_ok=True)
+    (working_dir / "prompts" / "rules" / "my-rule.md").write_text("# My Rule")
     # Don't lock — so there will be a "no lock file" warning
     (working_dir / "promptkit.lock").unlink()
 

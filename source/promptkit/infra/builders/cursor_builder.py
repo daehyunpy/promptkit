@@ -12,11 +12,11 @@ from promptkit.infra.builders.manifest import (
     write_manifest,
 )
 
+ALLOWED_CATEGORIES = {"skills", "rules", "scripts"}
+
 CATEGORY_MAPPING: dict[str, str] = {
     "skills": "skills-cursor",
 }
-
-SKIPPED_CATEGORIES = {"agents", "commands", "hooks"}
 
 PLATFORM_NAME = "cursor"
 
@@ -65,14 +65,14 @@ class CursorBuilder:
     def _map_path(file_path: str, /) -> str | None:
         """Map a file path for Cursor, applying directory renames and filtering.
 
-        Returns None if the file should be skipped.
+        Returns None if the file is not under an allowed category.
         """
         if "/" not in file_path:
-            return file_path
+            return None
 
         top_dir, rest = file_path.split("/", 1)
 
-        if top_dir in SKIPPED_CATEGORIES:
+        if top_dir not in ALLOWED_CATEGORIES:
             return None
 
         if top_dir in CATEGORY_MAPPING:

@@ -13,6 +13,7 @@ from promptkit.infra.builders.manifest import (
 )
 
 PLATFORM_NAME = "claude"
+ALLOWED_CATEGORIES = {"commands", "agents", "skills", "hooks", "scripts", "rules"}
 
 
 class ClaudeBuilder:
@@ -42,6 +43,8 @@ class ClaudeBuilder:
 
         for plugin in plugins:
             for file_path in plugin.files:
+                if not _is_allowed(file_path):
+                    continue
                 src = plugin.source_dir / file_path
                 dst = output_dir / file_path
                 dst.parent.mkdir(parents=True, exist_ok=True)
@@ -51,3 +54,12 @@ class ClaudeBuilder:
 
         write_manifest(project_dir, PLATFORM_NAME, relative_paths)
         return generated
+
+
+
+def _is_allowed(file_path: str, /) -> bool:
+    """Only copy files under allowed category directories."""
+    if "/" not in file_path:
+        return False
+    top_dir = file_path.split("/", 1)[0]
+    return top_dir in ALLOWED_CATEGORIES

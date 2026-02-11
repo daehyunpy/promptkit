@@ -1,31 +1,27 @@
 ## ADDED Requirements
 
-### Requirement: CursorBuilder routes prompts to Cursor-specific directories
-The `CursorBuilder` SHALL implement the `ArtifactBuilder` protocol and write prompt content to `.cursor/` subdirectories based on the prompt's source category.
+### Requirement: CursorBuilder copies only allowed category files with directory mapping
+The `CursorBuilder` SHALL implement the `ArtifactBuilder` protocol and copy only files under allowed category directories to `.cursor/`. The allowed categories are: `skills`, `rules`, `scripts`. Files outside these categories (e.g., `agents/`, `commands/`, `hooks/`, `README.md`, `.claude-plugin/`) SHALL be skipped. The `skills/` directory is mapped to `skills-cursor/` in the output.
 
-#### Scenario: Route skills category to skills-cursor directory
-- **WHEN** a prompt with source `local/skills/my-skill` is built
-- **THEN** the output file is written to `<output_dir>/skills-cursor/my-skill.md`
+#### Scenario: Copy and map skills to skills-cursor
+- **WHEN** a plugin contains files in `skills/`
+- **THEN** those files are copied to `<output_dir>/skills-cursor/`
 
-#### Scenario: Route rules category to rules directory
-- **WHEN** a prompt with source `local/rules/my-rule` is built
-- **THEN** the output file is written to `<output_dir>/rules/my-rule.md`
+#### Scenario: Copy rules without mapping
+- **WHEN** a plugin contains files in `rules/`
+- **THEN** those files are copied to `<output_dir>/rules/`
 
-#### Scenario: Route agents category to agents directory
-- **WHEN** a prompt with source `local/agents/my-agent` is built
-- **THEN** the output file is written to `<output_dir>/agents/my-agent.md`
+#### Scenario: Copy scripts without mapping
+- **WHEN** a plugin contains files in `scripts/`
+- **THEN** those files are copied to `<output_dir>/scripts/`
 
-#### Scenario: Route commands category to commands directory
-- **WHEN** a prompt with source `local/commands/my-command` is built
-- **THEN** the output file is written to `<output_dir>/commands/my-command.md`
+#### Scenario: Skip non-allowed categories
+- **WHEN** a plugin contains files in `agents/`, `commands/`, `hooks/`, `README.md`, or `.claude-plugin/`
+- **THEN** those files are not copied to the output directory
 
-#### Scenario: Route subagents category to subagents directory
-- **WHEN** a prompt with source `local/subagents/my-subagent` is built
-- **THEN** the output file is written to `<output_dir>/subagents/my-subagent.md`
-
-#### Scenario: Default flat prompts to rules category
-- **WHEN** a prompt with source `local/my-rule` (no subdirectory) is built
-- **THEN** the output file is written to `<output_dir>/rules/my-rule.md`
+#### Scenario: Skip flat files with no category
+- **WHEN** a plugin file has no directory prefix (e.g., `my-file.md`)
+- **THEN** the file is not copied to the output directory
 
 ### Requirement: CursorBuilder copies content without transformation
 The `CursorBuilder` SHALL write prompt content as-is, with no content transformation or frontmatter stripping.

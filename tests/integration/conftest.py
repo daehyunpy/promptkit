@@ -34,6 +34,10 @@ def write_config(project_dir: Path, config_yaml: str) -> None:
     (project_dir / "promptkit.yaml").write_text(config_yaml)
 
 
-def write_local_prompt(project_dir: Path, name: str, content: str) -> None:
-    """Write a local prompt file to the prompts/ directory."""
-    (project_dir / "prompts" / f"{name}.md").write_text(content)
+def write_local_prompt(
+    project_dir: Path, name: str, content: str, category: str = "rules"
+) -> None:
+    """Write a local prompt file to the prompts/<category>/ directory."""
+    category_dir = project_dir / "prompts" / category
+    category_dir.mkdir(parents=True, exist_ok=True)
+    (category_dir / f"{name}.md").write_text(content)

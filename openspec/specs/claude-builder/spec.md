@@ -1,31 +1,19 @@
 ## ADDED Requirements
 
-### Requirement: ClaudeBuilder routes prompts to Claude Code directories
-The `ClaudeBuilder` SHALL implement the `ArtifactBuilder` protocol and write prompt content to `.claude/` subdirectories based on the prompt's source category. Claude Code preserves category names as-is.
+### Requirement: ClaudeBuilder copies only allowed category files
+The `ClaudeBuilder` SHALL implement the `ArtifactBuilder` protocol and copy only files under allowed category directories to `.claude/`. The allowed categories are: `commands`, `agents`, `skills`, `hooks`, `scripts`, `rules`. Files outside these categories (e.g., `README.md`, `.claude-plugin/`) SHALL be skipped. Directory structure within allowed categories is preserved as-is.
 
-#### Scenario: Route skills category to skills directory
-- **WHEN** a prompt with source `local/skills/my-skill` is built
-- **THEN** the output file is written to `<output_dir>/skills/my-skill.md`
+#### Scenario: Copy files in allowed categories
+- **WHEN** a plugin contains files in `commands/`, `agents/`, `skills/`, `hooks/`, `scripts/`, and `rules/`
+- **THEN** all files under those directories are copied to the output directory
 
-#### Scenario: Route rules category to rules directory
-- **WHEN** a prompt with source `local/rules/my-rule` is built
-- **THEN** the output file is written to `<output_dir>/rules/my-rule.md`
+#### Scenario: Skip files outside allowed categories
+- **WHEN** a plugin contains `README.md` and `.claude-plugin/plugin.json`
+- **THEN** those files are not copied to the output directory
 
-#### Scenario: Route agents category to agents directory
-- **WHEN** a prompt with source `local/agents/my-agent` is built
-- **THEN** the output file is written to `<output_dir>/agents/my-agent.md`
-
-#### Scenario: Route commands category to commands directory
-- **WHEN** a prompt with source `local/commands/my-command` is built
-- **THEN** the output file is written to `<output_dir>/commands/my-command.md`
-
-#### Scenario: Route subagents category to subagents directory
-- **WHEN** a prompt with source `local/subagents/my-subagent` is built
-- **THEN** the output file is written to `<output_dir>/subagents/my-subagent.md`
-
-#### Scenario: Default flat prompts to rules category
-- **WHEN** a prompt with source `local/my-rule` (no subdirectory) is built
-- **THEN** the output file is written to `<output_dir>/rules/my-rule.md`
+#### Scenario: Skip flat files with no category
+- **WHEN** a plugin file has no directory prefix (e.g., `my-file.md`)
+- **THEN** the file is not copied to the output directory
 
 ### Requirement: ClaudeBuilder copies content without transformation
 The `ClaudeBuilder` SHALL write prompt content as-is, with no content transformation or frontmatter stripping.

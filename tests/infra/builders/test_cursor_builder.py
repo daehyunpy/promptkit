@@ -87,7 +87,7 @@ class TestDirectoryMapping:
 
         assert (output_dir / "rules" / "my-rule.md").read_text() == "# Rule"
 
-    def test_passes_through_unknown_categories(
+    def test_passes_through_scripts_without_mapping(
         self,
         builder: CursorBuilder,
         source_dir: Path,
@@ -102,7 +102,7 @@ class TestDirectoryMapping:
 
 
 class TestCategoryFiltering:
-    def test_skips_agents(
+    def test_only_copies_allowed_categories(
         self,
         builder: CursorBuilder,
         source_dir: Path,
@@ -112,55 +112,27 @@ class TestCategoryFiltering:
         plugin = _make_plugin(
             source_dir,
             {
+                "skills/my-skill/SKILL.md": "# Skill",
+                "rules/my-rule.md": "# Rule",
+                "scripts/check.sh": "#!/bin/bash",
                 "agents/reviewer.md": "# Agent",
-                "rules/my-rule.md": "# Rule",
-            },
-        )
-
-        builder.build([plugin], output_dir, project_dir)
-
-        assert not (output_dir / "agents").exists()
-        assert (output_dir / "rules" / "my-rule.md").exists()
-
-    def test_skips_commands(
-        self,
-        builder: CursorBuilder,
-        source_dir: Path,
-        output_dir: Path,
-        project_dir: Path,
-    ) -> None:
-        plugin = _make_plugin(
-            source_dir,
-            {
                 "commands/my-cmd.md": "# Command",
-                "rules/my-rule.md": "# Rule",
-            },
-        )
-
-        builder.build([plugin], output_dir, project_dir)
-
-        assert not (output_dir / "commands").exists()
-        assert (output_dir / "rules" / "my-rule.md").exists()
-
-    def test_skips_hooks(
-        self,
-        builder: CursorBuilder,
-        source_dir: Path,
-        output_dir: Path,
-        project_dir: Path,
-    ) -> None:
-        plugin = _make_plugin(
-            source_dir,
-            {
                 "hooks/hooks.json": "{}",
-                "rules/my-rule.md": "# Rule",
+                "README.md": "# Readme",
+                ".claude-plugin/plugin.json": '{}',
             },
         )
 
         builder.build([plugin], output_dir, project_dir)
 
-        assert not (output_dir / "hooks").exists()
+        assert (output_dir / "skills-cursor" / "my-skill" / "SKILL.md").exists()
         assert (output_dir / "rules" / "my-rule.md").exists()
+        assert (output_dir / "scripts" / "check.sh").exists()
+        assert not (output_dir / "agents").exists()
+        assert not (output_dir / "commands").exists()
+        assert not (output_dir / "hooks").exists()
+        assert not (output_dir / "README.md").exists()
+        assert not (output_dir / ".claude-plugin").exists()
 
 
 class TestManifestCleanup:
@@ -218,6 +190,23 @@ class TestManifestCleanup:
         assert (output_dir / "rules" / "new.md").exists()
         assert read_manifest(project_dir, "cursor") == ["rules/new.md"]
 
+    def test_skips_flat_files(
+        self,
+        builder: CursorBuilder,
+        source_dir: Path,
+        output_dir: Path,
+        project_dir: Path,
+    ) -> None:
+        """Files not under a category directory are skipped."""
+        plugin = _make_plugin(
+            source_dir, {"my-rule.md": "# Rule", "rules/real.md": "# Real"}
+        )
+
+        builder.build([plugin], output_dir, project_dir)
+
+        assert not (output_dir / "my-rule.md").exists()
+        assert (output_dir / "rules" / "real.md").exists()
+
     def test_manifest_records_mapped_paths(
         self,
         builder: CursorBuilder,
@@ -257,19 +246,6 @@ class TestReturnPaths:
         assert output_dir / "skills-cursor" / "c" / "SKILL.md" in paths
 
 
-class TestFlatFiles:
-    def test_copies_flat_files_directly(
-        self,
-        builder: CursorBuilder,
-        source_dir: Path,
-        output_dir: Path,
-        project_dir: Path,
-    ) -> None:
-        plugin = _make_plugin(source_dir, {"my-rule.md": "# Rule"})
-
-        builder.build([plugin], output_dir, project_dir)
-
-        assert (output_dir / "my-rule.md").read_text() == "# Rule"
 
 
 class TestPlatformProperty:
