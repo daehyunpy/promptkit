@@ -15,27 +15,22 @@ Read both before making changes.
 
 ## Current State
 
-**MVP phases 1-8 complete (local-only). Phase 9 (registry fetcher) in progress.** 243 tests passing.
+**MVP phases 1-9 complete. Phase 10 (polish) up next.** 272 tests passing.
 
 **Completed:**
 - Phase 1-2: Project scaffold + `promptkit init` command
-- Phase 3: Domain model (Prompt, PromptSpec, LockEntry, Registry, PlatformConfig, PlatformTarget, errors, protocols)
+- Phase 3: Domain model (Plugin, PromptSpec, LockEntry, Registry, PlatformConfig, PlatformTarget, errors, protocols)
 - Phase 4: Config loading (YamlLoader, LockFile reader/writer)
-- Phase 5: Lock command (LocalFileFetcher, PromptCache, LockPrompts use case, `promptkit lock` CLI)
+- Phase 5: Lock command (LocalPluginFetcher, PluginCache, LockPrompts use case, `promptkit lock` CLI)
 - Phase 6: Build command (CursorBuilder, ClaudeBuilder, BuildArtifacts use case)
 - Phase 7: Sync command (compose lock + build)
 - Phase 8: Validate command
+- Phase 9: Claude Marketplace Fetcher — unified `Plugin` model, `ClaudeMarketplaceFetcher`, directory-based `PluginCache`, multi-file local plugins
 
-**In Progress — Phase 9: Claude Marketplace Fetcher** (`openspec/changes/claude-marketplace-fetcher/`)
-- Unified `Plugin` model replaces `Prompt` — both local and registry plugins are file trees on disk
-- `PluginFetcher` protocol replaces `PromptFetcher` — single abstraction for local + registry
-- `ClaudeMarketplaceFetcher` — downloads full plugin directories from GitHub via Contents API
-- `PluginCache` — directory-based cache keyed by `{registry}/{plugin}/{commit_sha}/`
-- `LocalPluginFetcher` — replaces `LocalFileFetcher`, supports multi-file directories + non-md files
-- `LockEntry` gains `commit_sha` field for registry plugins
-- Builders copy file trees (not string content) with directory mapping
-- Removes: `Prompt`, `PromptFetcher`, `PromptCache`
-- See `openspec/changes/claude-marketplace-fetcher/tasks.md` for full task list (14 groups, ~70 subtasks)
+**Up Next — Phase 10: Polish**
+- Error messages
+- CLI help text
+- Progress indicators
 
 ## Tech Stack
 
@@ -121,7 +116,6 @@ promptkit/
 │       ├── cli.py                    # CLI entry point
 │       ├── domain/                   # Domain layer (pure business logic)
 │       │   ├── plugin.py            # Plugin value object (unified model)
-│       │   ├── prompt.py            # Prompt aggregate (being replaced by Plugin)
 │       │   ├── prompt_spec.py       # PromptSpec value object
 │       │   ├── lock_entry.py        # LockEntry value object (+commit_sha)
 │       │   ├── platform_target.py   # PlatformTarget enum
