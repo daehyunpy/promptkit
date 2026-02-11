@@ -57,11 +57,12 @@ def test_execute_fails_when_promptkit_yaml_exists(tmp_path: Path) -> None:
 
 
 def test_gitignore_is_created_with_cache_entry(tmp_path: Path) -> None:
-    """execute should create .gitignore with .promptkit/cache/ entry."""
+    """execute should create .gitignore with .promptkit/cache/ and registries entries."""
     _make_use_case().execute(tmp_path)
 
     content = (tmp_path / ".gitignore").read_text()
     assert ".promptkit/cache/" in content
+    assert ".promptkit/registries/" in content
 
 
 def test_gitignore_is_updated_if_exists(tmp_path: Path) -> None:

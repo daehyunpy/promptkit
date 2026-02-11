@@ -6,7 +6,6 @@ dependencies = [
     "typer",
     "pydantic-settings",
     "pyyaml",
-    "httpx",
 ]
 
 [project.scripts]

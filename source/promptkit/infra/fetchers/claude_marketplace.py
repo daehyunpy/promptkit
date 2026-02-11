@@ -1,19 +1,27 @@
 """Infrastructure layer: Fetch plugins from Claude Code marketplace (GitHub)."""
 
-import base64
 import json
 import re
+import shutil
 from pathlib import Path
-from typing import Any
-
-import httpx
+from typing import Any, Protocol
 
 from promptkit.domain.errors import SyncError
 from promptkit.domain.plugin import Plugin
 from promptkit.domain.prompt_spec import PromptSpec
+from promptkit.infra.fetchers.git_registry_clone import GitRegistryClone
 from promptkit.infra.storage.plugin_cache import PluginCache
 
-GITHUB_API_BASE = "https://api.github.com"
+
+class RegistryClone(Protocol):
+    """Structural protocol for registry clone objects (enables test doubles)."""
+
+    @property
+    def clone_dir(self) -> Path: ...
+    def ensure_up_to_date(self) -> None: ...
+    def get_commit_sha(self) -> str: ...
+
+
 MARKETPLACE_PATH = ".claude-plugin/marketplace.json"
 GITHUB_URL_PATTERN = re.compile(r"https://github\.com/([^/]+)/([^/]+)")
 
@@ -21,8 +29,8 @@ GITHUB_URL_PATTERN = re.compile(r"https://github\.com/([^/]+)/([^/]+)")
 class ClaudeMarketplaceFetcher:
     """Fetches plugins from a GitHub-hosted Claude marketplace registry.
 
-    Implements the PluginFetcher protocol. Downloads full plugin directories
-    from GitHub via Contents API and caches them by commit SHA.
+    Implements the PluginFetcher protocol. Reads plugin files from a local
+    shallow git clone and copies them to the cache by commit SHA.
     """
 
     def __init__(
@@ -31,33 +39,42 @@ class ClaudeMarketplaceFetcher:
         registry_url: str,
         registry_name: str,
         cache: PluginCache,
-        client: httpx.Client | None = None,
+        registries_dir: Path | None = None,
+        clone: RegistryClone | None = None,
     ) -> None:
         self._registry_name = registry_name
         self._cache = cache
-        self._client = client or httpx.Client()
         self._owner, self._repo = self._parse_github_url(registry_url)
+        default_registries_dir = cache.cache_dir.parent.parent / "registries"
+        self._clone = clone or GitRegistryClone(
+            registry_name=registry_name,
+            registry_url=registry_url,
+            registries_dir=registries_dir or default_registries_dir,
+        )
 
     def fetch(self, spec: PromptSpec, /) -> Plugin:
         """Fetch a plugin from the marketplace.
 
-        Looks up the plugin in marketplace.json, gets the latest commit SHA,
-        downloads all files to the cache directory, and returns a Plugin manifest.
+        Ensures the local clone is up to date, looks up the plugin in
+        marketplace.json, copies files to cache, and returns a Plugin manifest.
         """
         try:
-            return self._do_fetch(spec)
-        except httpx.HTTPError as e:
+            return self._fetch_and_cache(spec)
+        except SyncError:
+            raise
+        except Exception as e:
             raise SyncError(f"Failed to fetch plugin '{spec.prompt_name}': {e}") from e
 
-    def _do_fetch(self, spec: PromptSpec, /) -> Plugin:
-        marketplace = self._fetch_marketplace_json()
+    def _fetch_and_cache(self, spec: PromptSpec, /) -> Plugin:
+        self._clone.ensure_up_to_date()
+        marketplace = self._read_marketplace_json()
         entry = self._find_plugin_entry(marketplace, spec.prompt_name)
-        self._validate_source(entry)
-        sha = self._get_latest_commit_sha()
+        self._reject_external_source(entry)
+        sha = self._clone.get_commit_sha()
         cache_dir = self._cache.plugin_dir(self._registry_name, spec.prompt_name, sha)
 
         if not self._cache.has(self._registry_name, spec.prompt_name, sha):
-            self._download_plugin(entry, marketplace, cache_dir)
+            self._copy_plugin(entry, marketplace, cache_dir)
 
         files = self._cache.list_files(self._registry_name, spec.prompt_name, sha)
         return Plugin(
@@ -68,8 +85,8 @@ class ClaudeMarketplaceFetcher:
         )
 
     @staticmethod
-    def _validate_source(entry: dict[str, Any], /) -> None:
-        """Validate that the plugin source is a relative path, not external."""
+    def _reject_external_source(entry: dict[str, Any], /) -> None:
+        """Raise if the plugin source is an external URL dict, not a relative path."""
         source = entry.get("source", "")
         if isinstance(source, dict):
             raise SyncError(
@@ -77,30 +94,15 @@ class ClaudeMarketplaceFetcher:
                 "Only relative-path plugins are supported in this version."
             )
 
-    def _download_plugin(
-        self,
-        entry: dict[str, Any],
-        marketplace: dict[str, Any],
-        cache_dir: Path,
-        /,
-    ) -> None:
-        """Download all plugin files to the cache directory."""
-        skills = entry.get("skills")
-        if skills:
-            self._handle_skills_array(skills, cache_dir)
-        else:
-            source_path = self._resolve_source_path(entry, marketplace)
-            self._list_and_download_directory(
-                source_path, cache_dir, base_prefix=source_path
+    def _read_marketplace_json(self) -> dict[str, Any]:
+        """Read marketplace.json from the local clone."""
+        manifest_path = self._clone.clone_dir / MARKETPLACE_PATH
+        if not manifest_path.is_file():
+            raise SyncError(
+                f"marketplace.json not found in clone at {manifest_path}. "
+                f"Registry {self._owner}/{self._repo} may not be a valid marketplace."
             )
-
-    def _fetch_marketplace_json(self) -> dict[str, Any]:
-        url = f"{GITHUB_API_BASE}/repos/{self._owner}/{self._repo}/contents/{MARKETPLACE_PATH}"
-        response = self._client.get(url)
-        response.raise_for_status()
-        envelope = response.json()
-        content = base64.b64decode(envelope["content"]).decode()
-        return json.loads(content)
+        return json.loads(manifest_path.read_text())
 
     def _find_plugin_entry(
         self, marketplace: dict[str, Any], plugin_name: str, /
@@ -127,59 +129,45 @@ class ClaudeMarketplaceFetcher:
             return plugin_root
         return f"{plugin_root}/{path}"
 
-    def _get_latest_commit_sha(self) -> str:
-        url = f"{GITHUB_API_BASE}/repos/{self._owner}/{self._repo}/commits/HEAD"
-        response = self._client.get(url)
-        response.raise_for_status()
-        return response.json()["sha"]
-
-    def _list_and_download_directory(
+    def _copy_plugin(
         self,
-        dir_path: str,
+        entry: dict[str, Any],
+        marketplace: dict[str, Any],
         cache_dir: Path,
         /,
-        *,
-        base_prefix: str,
-    ) -> list[str]:
-        """Recursively list and download all files in a directory."""
-        url = f"{GITHUB_API_BASE}/repos/{self._owner}/{self._repo}/contents/{dir_path}"
-        response = self._client.get(url)
-        response.raise_for_status()
-        entries = response.json()
-
-        files: list[str] = []
-        for item in entries:
-            if item["type"] == "dir":
-                files.extend(
-                    self._list_and_download_directory(
-                        item["path"], cache_dir, base_prefix=base_prefix
-                    )
+    ) -> None:
+        """Copy plugin files from the local clone to the cache directory."""
+        skills = entry.get("skills")
+        if skills:
+            self._copy_skills(skills, cache_dir)
+        else:
+            source_path = self._resolve_source_path(entry, marketplace)
+            source_dir = self._clone.clone_dir / source_path
+            if not source_dir.is_dir():
+                raise SyncError(
+                    f"Plugin directory not found in clone: {source_path}"
                 )
-            elif item["type"] == "file":
-                relative = self._strip_prefix(item["path"], base_prefix)
-                self._download_file(item["download_url"], cache_dir / relative)
-                files.append(relative)
-        return files
+            self._copy_directory(source_dir, cache_dir)
 
-    def _handle_skills_array(self, skills: list[str], cache_dir: Path, /) -> None:
-        """Download files from each skill directory listed in the skills array."""
+    def _copy_skills(self, skills: list[str], cache_dir: Path, /) -> None:
+        """Copy skill directories from the clone to the cache."""
         for skill_path in skills:
             clean_path = skill_path.lstrip("./")
-            self._list_and_download_directory(clean_path, cache_dir, base_prefix="")
-
-    def _download_file(self, download_url: str, target_path: Path, /) -> None:
-        response = self._client.get(download_url)
-        response.raise_for_status()
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_path.write_bytes(response.content)
+            source_dir = self._clone.clone_dir / clean_path
+            target_dir = cache_dir / clean_path
+            if source_dir.is_dir():
+                self._copy_directory(source_dir, target_dir)
 
     @staticmethod
-    def _strip_prefix(path: str, prefix: str, /) -> str:
-        """Strip the repository prefix from a path to get the relative path."""
-        if prefix and path.startswith(prefix):
-            stripped = path[len(prefix) :]
-            return stripped.lstrip("/")
-        return path
+    def _copy_directory(source_dir: Path, target_dir: Path, /) -> None:
+        """Copy all files from source to target, preserving structure."""
+        for source_file in source_dir.rglob("*"):
+            if not source_file.is_file():
+                continue
+            relative = source_file.relative_to(source_dir)
+            target_file = target_dir / relative
+            target_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_file, target_file)
 
     @staticmethod
     def _parse_github_url(url: str, /) -> tuple[str, str]:

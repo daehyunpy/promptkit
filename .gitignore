@@ -21,8 +21,9 @@ node_modules/
 # macOS
 .DS_Store
 
-# promptkit cache
+# promptkit cache and registries
 .promptkit/cache/
+.promptkit/registries/
 
 # Claude Code settings (local overrides)
 .claude/settings.local.json

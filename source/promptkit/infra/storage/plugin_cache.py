@@ -14,6 +14,10 @@ class PluginCache:
     def __init__(self, cache_dir: Path, /) -> None:
         self._cache_dir = cache_dir
 
+    @property
+    def cache_dir(self) -> Path:
+        return self._cache_dir
+
     def has(self, registry: str, plugin: str, sha: str, /) -> bool:
         """Check if a plugin version is cached."""
         return self.plugin_dir(registry, plugin, sha).is_dir()

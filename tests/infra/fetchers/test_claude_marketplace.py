@@ -1,11 +1,8 @@
 """Tests for ClaudeMarketplaceFetcher."""
 
-import base64
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
 
-import httpx
 import pytest
 
 from promptkit.domain.errors import SyncError
@@ -13,34 +10,41 @@ from promptkit.domain.prompt_spec import PromptSpec
 from promptkit.infra.fetchers.claude_marketplace import ClaudeMarketplaceFetcher
 from promptkit.infra.storage.plugin_cache import PluginCache
 
-
-def _make_response(json_data: object, status_code: int = 200) -> MagicMock:
-    """Create a mock httpx.Response for JSON API calls."""
-    response = MagicMock()
-    response.status_code = status_code
-    response.json.return_value = json_data
-    if status_code >= 400:
-        response.raise_for_status.side_effect = httpx.HTTPStatusError(
-            "error", request=MagicMock(), response=response
-        )
-    return response
+FAKE_SHA = "abc123def4567890000000000000000000000000"
 
 
-def _make_download_response(content: bytes, status_code: int = 200) -> MagicMock:
-    """Create a mock httpx.Response for file downloads."""
-    response = MagicMock()
-    response.status_code = status_code
-    response.content = content
-    return response
+class FakeGitRegistryClone:
+    """Test double for GitRegistryClone using a temp directory with pre-populated files."""
+
+    def __init__(self, clone_dir: Path, sha: str = FAKE_SHA) -> None:
+        self._clone_dir = clone_dir
+        self._sha = sha
+        self.ensure_up_to_date_called = False
+
+    @property
+    def clone_dir(self) -> Path:
+        return self._clone_dir
+
+    def ensure_up_to_date(self) -> None:
+        self.ensure_up_to_date_called = True
+
+    def get_commit_sha(self) -> str:
+        return self._sha
 
 
-def _make_github_contents_response(payload: dict) -> MagicMock:
-    """Wrap a JSON payload in a GitHub Contents API envelope response."""
-    encoded = base64.b64encode(json.dumps(payload).encode()).decode()
-    return _make_response({"content": encoded})
+def _write_marketplace_json(clone_dir: Path, marketplace: dict) -> None:
+    manifest_dir = clone_dir / ".claude-plugin"
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    (manifest_dir / "marketplace.json").write_text(json.dumps(marketplace))
 
 
-SAMPLE_MARKETPLACE_JSON = {
+def _write_plugin_file(clone_dir: Path, path: str, content: str = "") -> None:
+    full_path = clone_dir / path
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    full_path.write_text(content)
+
+
+SAMPLE_MARKETPLACE = {
     "name": "claude-plugins-official",
     "owner": {"name": "Anthropic"},
     "plugins": [
@@ -56,167 +60,179 @@ SAMPLE_MARKETPLACE_JSON = {
     ],
 }
 
-SAMPLE_COMMIT_RESPONSE = {
-    "sha": "abc123def456789",
-    "commit": {"message": "latest commit"},
-}
-
-SAMPLE_DIR_LISTING = [
-    {
-        "name": "agents",
-        "type": "dir",
-        "path": "plugins/code-simplifier/agents",
-    },
-    {
-        "name": "hooks",
-        "type": "dir",
-        "path": "plugins/code-simplifier/hooks",
-    },
-]
-
-SAMPLE_AGENTS_LISTING = [
-    {
-        "name": "simplifier.md",
-        "type": "file",
-        "path": "plugins/code-simplifier/agents/simplifier.md",
-        "download_url": "https://raw.githubusercontent.com/org/repo/main/plugins/code-simplifier/agents/simplifier.md",
-    },
-]
-
-SAMPLE_HOOKS_LISTING = [
-    {
-        "name": "hooks.json",
-        "type": "file",
-        "path": "plugins/code-simplifier/hooks/hooks.json",
-        "download_url": "https://raw.githubusercontent.com/org/repo/main/plugins/code-simplifier/hooks/hooks.json",
-    },
-]
-
 
 @pytest.fixture
 def cache(tmp_path: Path) -> PluginCache:
     return PluginCache(tmp_path / "cache" / "plugins")
 
 
+@pytest.fixture
+def clone_dir(tmp_path: Path) -> Path:
+    d = tmp_path / "clone"
+    d.mkdir()
+    return d
+
+
 def _make_fetcher(
     cache: PluginCache,
-    client: httpx.Client,
+    clone: FakeGitRegistryClone,
     url: str = "https://github.com/anthropics/claude-plugins-official",
 ) -> ClaudeMarketplaceFetcher:
     return ClaudeMarketplaceFetcher(
         registry_url=url,
         registry_name="claude-plugins-official",
         cache=cache,
-        client=client,
+        clone=clone,
     )
 
 
 class TestGitHubUrlParsing:
-    def test_parses_standard_github_url(self, cache: PluginCache) -> None:
-        client = MagicMock(spec=httpx.Client)
-        fetcher = _make_fetcher(cache, client)
+    def test_parses_standard_github_url(
+        self, cache: PluginCache, clone_dir: Path
+    ) -> None:
+        clone = FakeGitRegistryClone(clone_dir)
+        fetcher = _make_fetcher(cache, clone)
         assert fetcher._owner == "anthropics"
         assert fetcher._repo == "claude-plugins-official"
 
-    def test_raises_for_invalid_url(self, cache: PluginCache) -> None:
-        client = MagicMock(spec=httpx.Client)
+    def test_raises_for_invalid_url(
+        self, cache: PluginCache, clone_dir: Path
+    ) -> None:
+        clone = FakeGitRegistryClone(clone_dir)
         with pytest.raises(SyncError, match="Invalid GitHub"):
-            _make_fetcher(cache, client, url="https://gitlab.com/org/repo")
+            _make_fetcher(cache, clone, url="https://gitlab.com/org/repo")
 
 
 class TestFetchPlugin:
-    def test_fetches_plugin_with_relative_path(self, cache: PluginCache) -> None:
-        client = MagicMock(spec=httpx.Client)
+    def test_fetches_plugin_with_relative_source(
+        self, cache: PluginCache, clone_dir: Path
+    ) -> None:
+        _write_marketplace_json(clone_dir, SAMPLE_MARKETPLACE)
+        _write_plugin_file(
+            clone_dir, "plugins/code-simplifier/agents/simplifier.md", "# Agent"
+        )
+        _write_plugin_file(
+            clone_dir, "plugins/code-simplifier/hooks/hooks.json", '{"hooks": []}'
+        )
 
-        # Call order: marketplace → commit → list root → list agents/ →
-        # download simplifier.md → list hooks/ → download hooks.json
-        client.get.side_effect = [
-            _make_github_contents_response(SAMPLE_MARKETPLACE_JSON),
-            _make_response(SAMPLE_COMMIT_RESPONSE),
-            _make_response(SAMPLE_DIR_LISTING),
-            _make_response(SAMPLE_AGENTS_LISTING),
-            _make_download_response(b"# Simplifier Agent"),
-            _make_response(SAMPLE_HOOKS_LISTING),
-            _make_download_response(b'{"hooks": []}'),
-        ]
-
-        fetcher = _make_fetcher(cache, client)
+        clone = FakeGitRegistryClone(clone_dir)
+        fetcher = _make_fetcher(cache, clone)
         spec = PromptSpec(source="claude-plugins-official/code-simplifier")
         plugin = fetcher.fetch(spec)
 
         assert plugin.spec is spec
-        assert plugin.commit_sha == "abc123def456789"
+        assert plugin.commit_sha == FAKE_SHA
         assert sorted(plugin.files) == ["agents/simplifier.md", "hooks/hooks.json"]
+        assert (plugin.source_dir / "agents" / "simplifier.md").read_text() == "# Agent"
+        assert clone.ensure_up_to_date_called
 
-    def test_skips_download_when_cached(
-        self, cache: PluginCache, tmp_path: Path
+    def test_fetches_plugin_with_mixed_files(
+        self, cache: PluginCache, clone_dir: Path
     ) -> None:
-        client = MagicMock(spec=httpx.Client)
-        # Pre-populate cache
-        cache_dir = cache.plugin_dir(
-            "claude-plugins-official", "code-simplifier", "abc123def456789"
+        _write_marketplace_json(clone_dir, SAMPLE_MARKETPLACE)
+        _write_plugin_file(
+            clone_dir, "plugins/code-simplifier/agents/reviewer.md", "# Reviewer"
         )
-        cache_dir.mkdir(parents=True)
-        (cache_dir / "agents").mkdir()
-        (cache_dir / "agents" / "simplifier.md").write_text("cached")
+        _write_plugin_file(
+            clone_dir,
+            "plugins/code-simplifier/.claude-plugin/plugin.json",
+            '{"name": "test"}',
+        )
+        _write_plugin_file(
+            clone_dir, "plugins/code-simplifier/hooks/hooks.json", "{}"
+        )
+        _write_plugin_file(
+            clone_dir, "plugins/code-simplifier/scripts/check.sh", "#!/bin/bash"
+        )
 
-        client.get.side_effect = [
-            _make_github_contents_response(SAMPLE_MARKETPLACE_JSON),
-            _make_response(SAMPLE_COMMIT_RESPONSE),
-        ]
-
-        fetcher = _make_fetcher(cache, client)
+        clone = FakeGitRegistryClone(clone_dir)
+        fetcher = _make_fetcher(cache, clone)
         spec = PromptSpec(source="claude-plugins-official/code-simplifier")
         plugin = fetcher.fetch(spec)
 
-        assert plugin.commit_sha == "abc123def456789"
+        assert sorted(plugin.files) == [
+            ".claude-plugin/plugin.json",
+            "agents/reviewer.md",
+            "hooks/hooks.json",
+            "scripts/check.sh",
+        ]
+
+    def test_skips_copy_when_cached(
+        self, cache: PluginCache, clone_dir: Path
+    ) -> None:
+        _write_marketplace_json(clone_dir, SAMPLE_MARKETPLACE)
+        _write_plugin_file(
+            clone_dir, "plugins/code-simplifier/agents/simplifier.md", "# Agent"
+        )
+
+        # Pre-populate cache
+        cache_dir = cache.plugin_dir(
+            "claude-plugins-official", "code-simplifier", FAKE_SHA
+        )
+        cache_dir.mkdir(parents=True)
+        (cache_dir / "agents").mkdir()
+        (cache_dir / "agents" / "simplifier.md").write_text("cached version")
+
+        clone = FakeGitRegistryClone(clone_dir)
+        fetcher = _make_fetcher(cache, clone)
+        spec = PromptSpec(source="claude-plugins-official/code-simplifier")
+        plugin = fetcher.fetch(spec)
+
+        assert plugin.commit_sha == FAKE_SHA
         assert plugin.files == ("agents/simplifier.md",)
-        # Only 2 API calls (marketplace + commit), not 7
-        assert client.get.call_count == 2
+        # Cached version should be preserved (no overwrite)
+        assert (plugin.source_dir / "agents" / "simplifier.md").read_text() == "cached version"
 
-    def test_plugin_not_found_raises(self, cache: PluginCache) -> None:
-        client = MagicMock(spec=httpx.Client)
-        client.get.return_value = _make_github_contents_response(SAMPLE_MARKETPLACE_JSON)
-
-        fetcher = _make_fetcher(cache, client)
+    def test_plugin_not_found_raises(
+        self, cache: PluginCache, clone_dir: Path
+    ) -> None:
+        _write_marketplace_json(clone_dir, SAMPLE_MARKETPLACE)
+        clone = FakeGitRegistryClone(clone_dir)
+        fetcher = _make_fetcher(cache, clone)
         spec = PromptSpec(source="claude-plugins-official/nonexistent")
 
         with pytest.raises(SyncError, match="not found"):
             fetcher.fetch(spec)
 
-    def test_external_source_raises(self, cache: PluginCache) -> None:
-        client = MagicMock(spec=httpx.Client)
-        client.get.return_value = _make_github_contents_response(SAMPLE_MARKETPLACE_JSON)
-
-        fetcher = _make_fetcher(cache, client)
+    def test_external_source_raises(
+        self, cache: PluginCache, clone_dir: Path
+    ) -> None:
+        _write_marketplace_json(clone_dir, SAMPLE_MARKETPLACE)
+        clone = FakeGitRegistryClone(clone_dir)
+        fetcher = _make_fetcher(cache, clone)
         spec = PromptSpec(source="claude-plugins-official/external-plugin")
 
         with pytest.raises(SyncError, match="External"):
             fetcher.fetch(spec)
 
-    def test_network_error_raises(self, cache: PluginCache) -> None:
-        client = MagicMock(spec=httpx.Client)
-        client.get.side_effect = httpx.ConnectError("Connection refused")
-
-        fetcher = _make_fetcher(cache, client)
+    def test_missing_marketplace_json_raises(
+        self, cache: PluginCache, clone_dir: Path
+    ) -> None:
+        # No marketplace.json written
+        clone = FakeGitRegistryClone(clone_dir)
+        fetcher = _make_fetcher(cache, clone)
         spec = PromptSpec(source="claude-plugins-official/code-simplifier")
 
-        with pytest.raises(SyncError, match="Connection"):
+        with pytest.raises(SyncError, match="marketplace.json not found"):
             fetcher.fetch(spec)
 
-    def test_http_error_raises(self, cache: PluginCache) -> None:
-        client = MagicMock(spec=httpx.Client)
-        client.get.return_value = _make_response({}, status_code=403)
-
-        fetcher = _make_fetcher(cache, client)
+    def test_missing_plugin_directory_raises(
+        self, cache: PluginCache, clone_dir: Path
+    ) -> None:
+        _write_marketplace_json(clone_dir, SAMPLE_MARKETPLACE)
+        # Don't create the plugin directory
+        clone = FakeGitRegistryClone(clone_dir)
+        fetcher = _make_fetcher(cache, clone)
         spec = PromptSpec(source="claude-plugins-official/code-simplifier")
 
-        with pytest.raises(SyncError):
+        with pytest.raises(SyncError, match="Plugin directory not found"):
             fetcher.fetch(spec)
 
 
 class TestSkillsRepoStructure:
-    def test_fetches_skills_from_skills_array(self, cache: PluginCache) -> None:
+    def test_fetches_skills_from_skills_array(
+        self, cache: PluginCache, clone_dir: Path
+    ) -> None:
         skills_marketplace = {
             "name": "anthropic-agent-skills",
             "owner": {"name": "Anthropic"},
@@ -229,60 +245,24 @@ class TestSkillsRepoStructure:
                 },
             ],
         }
-        xlsx_listing = [
-            {
-                "name": "SKILL.md",
-                "type": "file",
-                "path": "skills/xlsx/SKILL.md",
-                "download_url": "https://raw.githubusercontent.com/org/repo/main/skills/xlsx/SKILL.md",
-            },
-            {
-                "name": "scripts",
-                "type": "dir",
-                "path": "skills/xlsx/scripts",
-            },
-        ]
-        xlsx_scripts_listing = [
-            {
-                "name": "processor.py",
-                "type": "file",
-                "path": "skills/xlsx/scripts/processor.py",
-                "download_url": "https://raw.githubusercontent.com/org/repo/main/skills/xlsx/scripts/processor.py",
-            },
-        ]
-        docx_listing = [
-            {
-                "name": "SKILL.md",
-                "type": "file",
-                "path": "skills/docx/SKILL.md",
-                "download_url": "https://raw.githubusercontent.com/org/repo/main/skills/docx/SKILL.md",
-            },
-        ]
+        _write_marketplace_json(clone_dir, skills_marketplace)
+        _write_plugin_file(clone_dir, "skills/xlsx/SKILL.md", "# XLSX Skill")
+        _write_plugin_file(
+            clone_dir, "skills/xlsx/scripts/processor.py", "import openpyxl"
+        )
+        _write_plugin_file(clone_dir, "skills/docx/SKILL.md", "# DOCX Skill")
 
-        client = MagicMock(spec=httpx.Client)
-        # Call order: marketplace → commit → list xlsx/ → download SKILL.md →
-        # list xlsx/scripts/ → download processor.py → list docx/ → download SKILL.md
-        client.get.side_effect = [
-            _make_github_contents_response(skills_marketplace),
-            _make_response(SAMPLE_COMMIT_RESPONSE),
-            _make_response(xlsx_listing),
-            _make_download_response(b"# XLSX Skill"),
-            _make_response(xlsx_scripts_listing),
-            _make_download_response(b"import openpyxl"),
-            _make_response(docx_listing),
-            _make_download_response(b"# DOCX Skill"),
-        ]
-
+        clone = FakeGitRegistryClone(clone_dir)
         fetcher = ClaudeMarketplaceFetcher(
             registry_url="https://github.com/anthropics/skills",
             registry_name="anthropic-skills",
             cache=cache,
-            client=client,
+            clone=clone,
         )
         spec = PromptSpec(source="anthropic-skills/document-skills")
         plugin = fetcher.fetch(spec)
 
-        assert plugin.commit_sha == "abc123def456789"
+        assert plugin.commit_sha == FAKE_SHA
         assert sorted(plugin.files) == [
             "skills/docx/SKILL.md",
             "skills/xlsx/SKILL.md",

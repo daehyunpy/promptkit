@@ -19,6 +19,7 @@ from promptkit.infra.config.lock_file import LockFile
 from promptkit.infra.config.yaml_loader import YamlLoader
 from promptkit.infra.config_serializer import serialize_config_to_yaml
 from promptkit.infra.fetchers.claude_marketplace import ClaudeMarketplaceFetcher
+from promptkit.infra.fetchers.git_registry_clone import GitRegistryClone
 from promptkit.infra.fetchers.local_plugin_fetcher import LocalPluginFetcher
 from promptkit.infra.file_system.local import FileSystem
 from promptkit.infra.storage.plugin_cache import PluginCache
@@ -26,6 +27,7 @@ from promptkit.infra.storage.plugin_cache import PluginCache
 app = typer.Typer(help="Package manager for AI prompts")
 
 PLUGIN_CACHE_DIR = ".promptkit/cache/plugins"
+REGISTRIES_DIR = ".promptkit/registries"
 PROMPTS_DIR = "prompts"
 
 SUCCESS_MESSAGE = """\
@@ -48,16 +50,22 @@ Next steps:
 
 
 def _make_plugin_fetchers(
-    registries: list[Registry], cache: PluginCache
+    registries: list[Registry], cache: PluginCache, registries_dir: Path
 ) -> dict[str, PluginFetcher]:
     """Map config registries to PluginFetcher instances."""
     fetchers: dict[str, PluginFetcher] = {}
     for registry in registries:
         if registry.registry_type == RegistryType.CLAUDE_MARKETPLACE:
+            clone = GitRegistryClone(
+                registry_name=registry.name,
+                registry_url=registry.url,
+                registries_dir=registries_dir,
+            )
             fetchers[registry.name] = ClaudeMarketplaceFetcher(
                 registry_url=registry.url,
                 registry_name=registry.name,
                 cache=cache,
+                clone=clone,
             )
     return fetchers
 
@@ -79,7 +87,7 @@ def _make_lock_use_case(cwd: Path, fs: FileSystem) -> LockPrompts:
         yaml_loader=yaml_loader,
         lock_file=LockFile(),
         local_fetcher=LocalPluginFetcher(fs, cwd / PROMPTS_DIR),
-        fetchers=_make_plugin_fetchers(registries, cache),
+        fetchers=_make_plugin_fetchers(registries, cache, cwd / REGISTRIES_DIR),
     )
 
 
