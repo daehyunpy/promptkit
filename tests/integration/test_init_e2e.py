@@ -27,7 +27,7 @@ class TestInitEndToEnd:
         assert (project_dir / "prompts").is_dir()
         assert (project_dir / ".cursor").is_dir()
         assert (project_dir / ".claude").is_dir()
-        assert (project_dir / ".gitignore").exists()
+        assert (project_dir / ".promptkit" / ".gitignore").exists()
 
     def test_init_generates_parseable_config(self, project_dir: Path) -> None:
         runner.invoke(app, ["init"])

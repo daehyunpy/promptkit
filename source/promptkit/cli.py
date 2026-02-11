@@ -33,19 +33,14 @@ PROMPTS_DIR = "prompts"
 SUCCESS_MESSAGE = """\
 ✓ Initialized promptkit project
 
-Created files and directories:
-  - promptkit.yaml (project configuration)
-  - promptkit.lock (dependency lock file)
-  - .promptkit/cache/ (cached prompts)
-  - prompts/ (local prompts)
-  - .cursor/ (Cursor artifacts)
-  - .claude/ (Claude Code artifacts)
-  - .gitignore (updated with cache exclusions)
+  promptkit.yaml    configuration
+  promptkit.lock    dependency lock
+  prompts/          local prompts
+  .promptkit/       cache, registries, and build manifests (gitignored)
 
 Next steps:
   1. Edit promptkit.yaml to configure prompts
-  2. Run 'promptkit sync' to fetch prompts
-  3. Run 'promptkit build' to generate artifacts\
+  2. Run 'promptkit sync' to fetch and build\
 """
 
 

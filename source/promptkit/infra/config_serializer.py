@@ -7,7 +7,7 @@ from promptkit.domain.project_config import ProjectConfig
 PROMPT_EXAMPLE_COMMENT = """\
   # Example prompt entry - uncomment and edit
   # - claude-plugins-official/code-review
-  # - anthropic-agent-skills/feature-dev
+  # - anthropic-agent-skills/document-skills
 """
 
 

@@ -56,25 +56,20 @@ def test_execute_fails_when_promptkit_yaml_exists(tmp_path: Path) -> None:
         _make_use_case().execute(tmp_path)
 
 
-def test_gitignore_is_created_with_cache_entry(tmp_path: Path) -> None:
-    """execute should create .gitignore with .promptkit/cache/ and registries entries."""
+def test_creates_promptkit_gitignore(tmp_path: Path) -> None:
+    """execute should create .promptkit/.gitignore that ignores all contents."""
     _make_use_case().execute(tmp_path)
 
-    content = (tmp_path / ".gitignore").read_text()
-    assert ".promptkit/cache/" in content
-    assert ".promptkit/registries/" in content
+    gitignore = tmp_path / ".promptkit" / ".gitignore"
+    assert gitignore.exists()
+    assert "*" in gitignore.read_text()
 
 
-def test_gitignore_is_updated_if_exists(tmp_path: Path) -> None:
-    """execute should append to existing .gitignore."""
-    gitignore_path = tmp_path / ".gitignore"
-    gitignore_path.write_text("# Existing content\n*.pyc\n")
-
+def test_does_not_create_root_gitignore(tmp_path: Path) -> None:
+    """execute should not create a root .gitignore."""
     _make_use_case().execute(tmp_path)
 
-    content = gitignore_path.read_text()
-    assert "*.pyc" in content
-    assert ".promptkit/cache/" in content
+    assert not (tmp_path / ".gitignore").exists()
 
 
 def test_execute_does_not_modify_files_when_config_exists(tmp_path: Path) -> None:

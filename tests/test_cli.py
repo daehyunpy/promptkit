@@ -46,7 +46,7 @@ def test_init_command_creates_expected_files(working_dir: Path) -> None:
     assert (working_dir / ".claude").exists()
     assert (working_dir / "promptkit.yaml").exists()
     assert (working_dir / "promptkit.lock").exists()
-    assert (working_dir / ".gitignore").exists()
+    assert (working_dir / ".promptkit" / ".gitignore").exists()
 
 
 def test_init_command_fails_when_config_exists(working_dir: Path) -> None:
@@ -65,11 +65,8 @@ def test_success_message_is_displayed(working_dir: Path) -> None:
     assert result.exit_code == 0
 
     assert "Initialized promptkit project" in result.stdout
-    assert "Created files and directories:" in result.stdout
-    assert "promptkit.yaml" in result.stdout
     assert "Next steps:" in result.stdout
     assert "promptkit sync" in result.stdout
-    assert "promptkit build" in result.stdout
 
 
 def test_exit_code_zero_on_success(working_dir: Path) -> None:
