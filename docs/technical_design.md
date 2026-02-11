@@ -684,4 +684,4 @@ Post-MVP, we may need AI to adapt prompts between platform formats. If added:
 
 2. **Skills can be zip files** — Skills in the Claude marketplace can be distributed as `.zip` files. Fetchers and builders need to handle extracting zip-packaged skills alongside the current directory-based format.
 
-3. **Hooks, scripts, and MCP not yet supported in builders** — Builders currently allow only `commands`, `agents`, `skills`, and `rules` categories. Support for `hooks`, `scripts`, and `mcp` should be adapted in a future phase.
+3. **Hooks, scripts, MCP, and LSP not yet supported in builders** — Builders currently allow only `commands`, `agents`, `skills`, and `rules` categories. Support for `hooks`, `scripts`, `mcp`, and `lsp` should be adapted in a future phase.
