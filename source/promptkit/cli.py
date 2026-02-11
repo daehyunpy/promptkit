@@ -10,19 +10,22 @@ from promptkit.app.lock import LockPrompts
 from promptkit.app.validate import ValidateConfig
 from promptkit.domain.errors import PromptError
 from promptkit.domain.platform_target import PlatformTarget
+from promptkit.domain.protocols import PluginFetcher
+from promptkit.domain.registry import Registry, RegistryType
 from promptkit.domain.validation import LEVEL_ERROR, ValidationIssue
 from promptkit.infra.builders.claude_builder import ClaudeBuilder
 from promptkit.infra.builders.cursor_builder import CursorBuilder
 from promptkit.infra.config.lock_file import LockFile
 from promptkit.infra.config.yaml_loader import YamlLoader
 from promptkit.infra.config_serializer import serialize_config_to_yaml
-from promptkit.infra.fetchers.local_file_fetcher import LocalFileFetcher
+from promptkit.infra.fetchers.claude_marketplace import ClaudeMarketplaceFetcher
+from promptkit.infra.fetchers.local_plugin_fetcher import LocalPluginFetcher
 from promptkit.infra.file_system.local import FileSystem
-from promptkit.infra.storage.prompt_cache import PromptCache
+from promptkit.infra.storage.plugin_cache import PluginCache
 
 app = typer.Typer(help="Package manager for AI prompts")
 
-CACHE_DIR = ".promptkit/cache"
+PLUGIN_CACHE_DIR = ".promptkit/cache/plugins"
 PROMPTS_DIR = "prompts"
 
 SUCCESS_MESSAGE = """\
@@ -44,15 +47,39 @@ Next steps:
 """
 
 
+def _make_plugin_fetchers(
+    registries: list[Registry], cache: PluginCache
+) -> dict[str, PluginFetcher]:
+    """Map config registries to PluginFetcher instances."""
+    fetchers: dict[str, PluginFetcher] = {}
+    for registry in registries:
+        if registry.registry_type == RegistryType.CLAUDE_MARKETPLACE:
+            fetchers[registry.name] = ClaudeMarketplaceFetcher(
+                registry_url=registry.url,
+                registry_name=registry.name,
+                cache=cache,
+            )
+    return fetchers
+
+
 def _make_lock_use_case(cwd: Path, fs: FileSystem) -> LockPrompts:
     """Create a LockPrompts use case with standard wiring."""
+    yaml_loader = YamlLoader()
+    config_path = cwd / "promptkit.yaml"
+    cache = PluginCache(cwd / PLUGIN_CACHE_DIR)
+
+    registries: list[Registry] = []
+    if config_path.exists():
+        yaml_content = fs.read_file(config_path)
+        config = yaml_loader.load(yaml_content)
+        registries = config.registries
+
     return LockPrompts(
         file_system=fs,
-        yaml_loader=YamlLoader(),
+        yaml_loader=yaml_loader,
         lock_file=LockFile(),
-        prompt_cache=PromptCache(fs, cwd / CACHE_DIR),
-        local_fetcher=LocalFileFetcher(fs, cwd / PROMPTS_DIR),
-        fetchers={},
+        local_fetcher=LocalPluginFetcher(fs, cwd / PROMPTS_DIR),
+        fetchers=_make_plugin_fetchers(registries, cache),
     )
 
 
@@ -62,7 +89,7 @@ def _make_build_use_case(cwd: Path, fs: FileSystem) -> BuildArtifacts:
         file_system=fs,
         yaml_loader=YamlLoader(),
         lock_file=LockFile(),
-        prompt_cache=PromptCache(fs, cwd / CACHE_DIR),
+        plugin_cache=PluginCache(cwd / PLUGIN_CACHE_DIR),
         builders={
             PlatformTarget.CURSOR: CursorBuilder(fs),
             PlatformTarget.CLAUDE_CODE: ClaudeBuilder(fs),

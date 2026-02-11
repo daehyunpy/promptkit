@@ -5,10 +5,17 @@ from pathlib import Path
 import pytest
 
 from promptkit.domain.platform_target import PlatformTarget
-from promptkit.domain.prompt import Prompt
+from promptkit.domain.plugin import Plugin
 from promptkit.domain.prompt_spec import PromptSpec
 from promptkit.infra.builders.cursor_builder import CursorBuilder
 from promptkit.infra.file_system.local import FileSystem
+
+
+@pytest.fixture
+def source_dir(tmp_path: Path) -> Path:
+    d = tmp_path / "source"
+    d.mkdir()
+    return d
 
 
 @pytest.fixture
@@ -23,125 +30,153 @@ def builder() -> CursorBuilder:
     return CursorBuilder(FileSystem())
 
 
-class TestCategoryRouting:
-    def test_routes_skills_to_skills_cursor(
-        self, builder: CursorBuilder, output_dir: Path
+def _make_plugin(
+    source_dir: Path,
+    files: dict[str, str],
+    source: str = "local/test",
+) -> Plugin:
+    """Create a Plugin with actual files on disk."""
+    for path, content in files.items():
+        full = source_dir / path
+        full.parent.mkdir(parents=True, exist_ok=True)
+        full.write_text(content)
+    return Plugin(
+        spec=PromptSpec(source=source),
+        files=tuple(files.keys()),
+        source_dir=source_dir,
+    )
+
+
+class TestDirectoryMapping:
+    def test_maps_skills_to_skills_cursor(
+        self, builder: CursorBuilder, source_dir: Path, output_dir: Path
     ) -> None:
-        prompt = Prompt(
-            spec=PromptSpec(source="local/skills/my-skill"), content="# Skill"
+        plugin = _make_plugin(
+            source_dir,
+            {
+                "skills/my-skill/SKILL.md": "# Skill",
+            },
         )
 
-        builder.build([prompt], output_dir)
+        builder.build([plugin], output_dir)
 
-        assert (output_dir / "skills-cursor" / "my-skill.md").read_text() == "# Skill"
+        assert (
+            output_dir / "skills-cursor" / "my-skill" / "SKILL.md"
+        ).read_text() == "# Skill"
 
-    def test_routes_rules_to_rules(
-        self, builder: CursorBuilder, output_dir: Path
+    def test_preserves_rules(
+        self, builder: CursorBuilder, source_dir: Path, output_dir: Path
     ) -> None:
-        prompt = Prompt(
-            spec=PromptSpec(source="local/rules/my-rule"), content="# Rule"
-        )
+        plugin = _make_plugin(source_dir, {"rules/my-rule.md": "# Rule"})
 
-        builder.build([prompt], output_dir)
+        builder.build([plugin], output_dir)
 
         assert (output_dir / "rules" / "my-rule.md").read_text() == "# Rule"
 
-    def test_routes_agents_to_agents(
-        self, builder: CursorBuilder, output_dir: Path
+    def test_passes_through_unknown_categories(
+        self, builder: CursorBuilder, source_dir: Path, output_dir: Path
     ) -> None:
-        prompt = Prompt(
-            spec=PromptSpec(source="local/agents/my-agent"), content="# Agent"
+        plugin = _make_plugin(source_dir, {"scripts/check.sh": "#!/bin/bash"})
+
+        builder.build([plugin], output_dir)
+
+        assert (output_dir / "scripts" / "check.sh").read_text() == "#!/bin/bash"
+
+
+class TestCategoryFiltering:
+    def test_skips_agents(
+        self, builder: CursorBuilder, source_dir: Path, output_dir: Path
+    ) -> None:
+        plugin = _make_plugin(
+            source_dir,
+            {
+                "agents/reviewer.md": "# Agent",
+                "rules/my-rule.md": "# Rule",
+            },
         )
 
-        builder.build([prompt], output_dir)
+        builder.build([plugin], output_dir)
 
-        assert (output_dir / "agents" / "my-agent.md").read_text() == "# Agent"
+        assert not (output_dir / "agents").exists()
+        assert (output_dir / "rules" / "my-rule.md").exists()
 
-    def test_routes_commands_to_commands(
-        self, builder: CursorBuilder, output_dir: Path
+    def test_skips_commands(
+        self, builder: CursorBuilder, source_dir: Path, output_dir: Path
     ) -> None:
-        prompt = Prompt(
-            spec=PromptSpec(source="local/commands/my-cmd"), content="# Command"
+        plugin = _make_plugin(
+            source_dir,
+            {
+                "commands/my-cmd.md": "# Command",
+                "rules/my-rule.md": "# Rule",
+            },
         )
 
-        builder.build([prompt], output_dir)
+        builder.build([plugin], output_dir)
 
-        assert (output_dir / "commands" / "my-cmd.md").read_text() == "# Command"
+        assert not (output_dir / "commands").exists()
+        assert (output_dir / "rules" / "my-rule.md").exists()
 
-    def test_routes_subagents_to_subagents(
-        self, builder: CursorBuilder, output_dir: Path
+    def test_skips_hooks(
+        self, builder: CursorBuilder, source_dir: Path, output_dir: Path
     ) -> None:
-        prompt = Prompt(
-            spec=PromptSpec(source="local/subagents/my-sub"), content="# Subagent"
+        plugin = _make_plugin(
+            source_dir,
+            {
+                "hooks/hooks.json": "{}",
+                "rules/my-rule.md": "# Rule",
+            },
         )
 
-        builder.build([prompt], output_dir)
+        builder.build([plugin], output_dir)
 
-        assert (output_dir / "subagents" / "my-sub.md").read_text() == "# Subagent"
-
-
-class TestFlatSourceDefault:
-    def test_flat_source_defaults_to_rules(
-        self, builder: CursorBuilder, output_dir: Path
-    ) -> None:
-        prompt = Prompt(
-            spec=PromptSpec(source="local/my-rule"), content="# Rule"
-        )
-
-        builder.build([prompt], output_dir)
-
-        assert (output_dir / "rules" / "my-rule.md").read_text() == "# Rule"
-
-
-class TestContentPreservation:
-    def test_copies_content_without_transformation(
-        self, builder: CursorBuilder, output_dir: Path
-    ) -> None:
-        content = "---\nauthor: Test\n---\n\n# Prompt\n\nContent with frontmatter."
-        prompt = Prompt(
-            spec=PromptSpec(source="local/rules/my-rule"), content=content
-        )
-
-        builder.build([prompt], output_dir)
-
-        assert (output_dir / "rules" / "my-rule.md").read_text() == content
+        assert not (output_dir / "hooks").exists()
+        assert (output_dir / "rules" / "my-rule.md").exists()
 
 
 class TestCleanBeforeWrite:
     def test_removes_stale_artifacts(
-        self, builder: CursorBuilder, output_dir: Path
+        self, builder: CursorBuilder, source_dir: Path, output_dir: Path
     ) -> None:
-        # Create stale artifact
-        stale_dir = output_dir / "rules"
-        stale_dir.mkdir()
-        (stale_dir / "old-rule.md").write_text("stale")
+        stale = output_dir / "old" / "stale.md"
+        stale.parent.mkdir(parents=True)
+        stale.write_text("stale")
 
-        new_prompt = Prompt(
-            spec=PromptSpec(source="local/skills/new-skill"), content="# New"
-        )
+        plugin = _make_plugin(source_dir, {"rules/new.md": "# New"})
+        builder.build([plugin], output_dir)
 
-        builder.build([new_prompt], output_dir)
-
-        assert not (output_dir / "rules" / "old-rule.md").exists()
-        assert (output_dir / "skills-cursor" / "new-skill.md").exists()
+        assert not stale.exists()
+        assert (output_dir / "rules" / "new.md").exists()
 
 
 class TestReturnPaths:
-    def test_returns_generated_paths(
-        self, builder: CursorBuilder, output_dir: Path
+    def test_returns_only_copied_paths(
+        self, builder: CursorBuilder, source_dir: Path, output_dir: Path
     ) -> None:
-        prompts = [
-            Prompt(spec=PromptSpec(source="local/rules/a"), content="A"),
-            Prompt(spec=PromptSpec(source="local/rules/b"), content="B"),
-            Prompt(spec=PromptSpec(source="local/skills/c"), content="C"),
-        ]
+        plugin = _make_plugin(
+            source_dir,
+            {
+                "rules/a.md": "A",
+                "agents/b.md": "B",  # skipped
+                "skills/c/SKILL.md": "C",
+            },
+        )
 
-        paths = builder.build(prompts, output_dir)
+        paths = builder.build([plugin], output_dir)
 
-        assert len(paths) == 3
+        assert len(paths) == 2
         assert output_dir / "rules" / "a.md" in paths
-        assert output_dir / "rules" / "b.md" in paths
-        assert output_dir / "skills-cursor" / "c.md" in paths
+        assert output_dir / "skills-cursor" / "c" / "SKILL.md" in paths
+
+
+class TestFlatFiles:
+    def test_copies_flat_files_directly(
+        self, builder: CursorBuilder, source_dir: Path, output_dir: Path
+    ) -> None:
+        plugin = _make_plugin(source_dir, {"my-rule.md": "# Rule"})
+
+        builder.build([plugin], output_dir)
+
+        assert (output_dir / "my-rule.md").read_text() == "# Rule"
 
 
 class TestPlatformProperty:

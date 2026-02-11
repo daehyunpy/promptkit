@@ -21,7 +21,7 @@ def project_dir(tmp_path: Path) -> Iterator[Path]:
     d = tmp_path / "project"
     d.mkdir()
     (d / "prompts").mkdir()
-    (d / ".promptkit" / "cache").mkdir(parents=True)
+    (d / ".promptkit" / "cache" / "plugins").mkdir(parents=True)
 
     original = os.getcwd()
     os.chdir(d)

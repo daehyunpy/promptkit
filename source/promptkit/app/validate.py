@@ -4,7 +4,6 @@ from pathlib import Path
 
 from promptkit.domain.errors import ValidationError
 from promptkit.domain.file_system import FileSystem
-from promptkit.domain.prompt import LOCAL_SOURCE_PREFIX
 from promptkit.domain.validation import (
     LEVEL_ERROR,
     LEVEL_WARNING,
@@ -15,6 +14,7 @@ from promptkit.infra.config.lock_file import LockFile
 from promptkit.infra.config.yaml_loader import LoadedConfig, YamlLoader
 
 CONFIG_FILENAME = "promptkit.yaml"
+LOCAL_SOURCE_PREFIX = "local/"
 LOCK_FILENAME = "promptkit.lock"
 
 

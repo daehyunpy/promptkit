@@ -93,3 +93,62 @@ prompts:
 """
         with pytest.raises(ValidationError, match="name"):
             LockFile.deserialize(yaml_content)
+
+
+class TestLockFileCommitSha:
+    def test_serialize_entry_with_commit_sha(self) -> None:
+        entry = LockEntry(
+            name="code-review",
+            source="claude-plugins-official/code-review",
+            content_hash="",
+            fetched_at=datetime(2026, 2, 8, 14, 50, 0, tzinfo=timezone.utc),
+            commit_sha="abc123def",
+        )
+        result = LockFile.serialize([entry])
+        assert "commit_sha: abc123def" in result
+
+    def test_serialize_entry_without_commit_sha_omits_field(self) -> None:
+        entry = LockEntry(
+            name="my-rule",
+            source="local/my-rule",
+            content_hash="sha256:abc",
+            fetched_at=datetime(2026, 2, 8, 14, 50, 0, tzinfo=timezone.utc),
+        )
+        result = LockFile.serialize([entry])
+        assert "commit_sha" not in result
+
+    def test_roundtrip_with_commit_sha(self) -> None:
+        entry = LockEntry(
+            name="code-review",
+            source="claude-plugins-official/code-review",
+            content_hash="",
+            fetched_at=datetime(2026, 2, 8, 14, 50, 0, tzinfo=timezone.utc),
+            commit_sha="abc123def",
+        )
+        serialized = LockFile.serialize([entry])
+        deserialized = LockFile.deserialize(serialized)
+        assert deserialized[0].commit_sha == "abc123def"
+        assert deserialized[0].content_hash == ""
+
+    def test_roundtrip_without_commit_sha(self) -> None:
+        entry = LockEntry(
+            name="my-rule",
+            source="local/my-rule",
+            content_hash="sha256:abc",
+            fetched_at=datetime(2026, 2, 8, 14, 50, 0, tzinfo=timezone.utc),
+        )
+        serialized = LockFile.serialize([entry])
+        deserialized = LockFile.deserialize(serialized)
+        assert deserialized[0].commit_sha is None
+
+    def test_backward_compatible_lock_file_without_commit_sha(self) -> None:
+        yaml_content = """\
+version: 1
+prompts:
+  - name: old-prompt
+    source: local/old-prompt
+    hash: sha256:abc
+    fetched_at: '2026-02-08T14:50:00+00:00'
+"""
+        entries = LockFile.deserialize(yaml_content)
+        assert entries[0].commit_sha is None

@@ -121,9 +121,7 @@ def test_lock_succeeds_with_local_prompts(working_dir: Path) -> None:
 
     assert result.exit_code == 0
     assert "Locked" in result.stdout
-    lock_content = yaml.safe_load(
-        (working_dir / "promptkit.lock").read_text()
-    )
+    lock_content = yaml.safe_load((working_dir / "promptkit.lock").read_text())
     assert len(lock_content["prompts"]) == 1
     assert lock_content["prompts"][0]["source"] == "local/my-rule"
 
@@ -143,9 +141,7 @@ def test_lock_succeeds_with_no_prompts(working_dir: Path) -> None:
     result = runner.invoke(app, ["lock"])
 
     assert result.exit_code == 0
-    lock_content = yaml.safe_load(
-        (working_dir / "promptkit.lock").read_text()
-    )
+    lock_content = yaml.safe_load((working_dir / "promptkit.lock").read_text())
     assert lock_content["prompts"] == []
 
 
@@ -170,8 +166,8 @@ def test_build_succeeds_with_local_prompts(working_dir: Path) -> None:
 
     assert result.exit_code == 0
     assert "Built" in result.stdout
-    assert (working_dir / ".cursor" / "rules" / "my-rule.md").exists()
-    assert (working_dir / ".claude" / "rules" / "my-rule.md").exists()
+    assert (working_dir / ".cursor" / "my-rule.md").exists()
+    assert (working_dir / ".claude" / "my-rule.md").exists()
 
 
 def test_build_fails_without_lock_file(working_dir: Path) -> None:
@@ -212,14 +208,12 @@ def test_sync_succeeds_with_local_prompts(working_dir: Path) -> None:
 
     assert result.exit_code == 0
     # Lock file should be updated
-    lock_content = yaml.safe_load(
-        (working_dir / "promptkit.lock").read_text()
-    )
+    lock_content = yaml.safe_load((working_dir / "promptkit.lock").read_text())
     assert len(lock_content["prompts"]) == 1
     assert lock_content["prompts"][0]["source"] == "local/my-rule"
     # Artifacts should be generated
-    assert (working_dir / ".cursor" / "rules" / "my-rule.md").exists()
-    assert (working_dir / ".claude" / "rules" / "my-rule.md").exists()
+    assert (working_dir / ".cursor" / "my-rule.md").exists()
+    assert (working_dir / ".claude" / "my-rule.md").exists()
 
 
 def test_sync_fails_without_config(working_dir: Path) -> None:

@@ -81,3 +81,45 @@ class TestLockEntry:
             fetched_at=datetime.now(tz=timezone.utc),
         )
         assert entry.has_content_changed("sha256:abc") is False
+
+
+class TestLockEntryCommitSha:
+    def test_commit_sha_defaults_to_none(self) -> None:
+        entry = LockEntry(
+            name="test",
+            source="local/test",
+            content_hash="sha256:abc",
+            fetched_at=datetime.now(tz=timezone.utc),
+        )
+        assert entry.commit_sha is None
+
+    def test_registry_plugin_with_commit_sha(self) -> None:
+        entry = LockEntry(
+            name="code-review",
+            source="claude-plugins-official/code-review",
+            content_hash="",
+            fetched_at=datetime.now(tz=timezone.utc),
+            commit_sha="abc123def",
+        )
+        assert entry.commit_sha == "abc123def"
+        assert entry.content_hash == ""
+
+    def test_has_commit_changed_detects_difference(self) -> None:
+        entry = LockEntry(
+            name="test",
+            source="registry/test",
+            content_hash="",
+            fetched_at=datetime.now(tz=timezone.utc),
+            commit_sha="abc123",
+        )
+        assert entry.has_commit_changed("def456") is True
+
+    def test_has_commit_changed_detects_same(self) -> None:
+        entry = LockEntry(
+            name="test",
+            source="registry/test",
+            content_hash="",
+            fetched_at=datetime.now(tz=timezone.utc),
+            commit_sha="abc123",
+        )
+        assert entry.has_commit_changed("abc123") is False

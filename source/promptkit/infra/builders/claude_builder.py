@@ -1,27 +1,18 @@
 """Infrastructure layer: Claude Code platform artifact builder."""
 
+import shutil
 from pathlib import Path
 
 from promptkit.domain.file_system import FileSystem
 from promptkit.domain.platform_target import PlatformTarget
-from promptkit.domain.prompt import Prompt
-
-PROMPT_EXTENSION = ".md"
-
-CATEGORY_DIRS: dict[str, str] = {
-    "skills": "skills",
-    "rules": "rules",
-    "agents": "agents",
-    "commands": "commands",
-    "subagents": "subagents",
-}
+from promptkit.domain.plugin import Plugin
 
 
 class ClaudeBuilder:
-    """Builds .claude/ artifacts from prompts using directory-based routing.
+    """Builds .claude/ artifacts by copying plugin file trees.
 
-    Implements the ArtifactBuilder protocol. Maps prompt categories to
-    Claude Code output directories (preserves category names as-is).
+    Implements the ArtifactBuilder protocol. Copies all files from each
+    plugin's source_dir to the output directory, preserving structure.
     """
 
     def __init__(self, file_system: FileSystem, /) -> None:
@@ -31,20 +22,15 @@ class ClaudeBuilder:
     def platform(self) -> PlatformTarget:
         return PlatformTarget.CLAUDE_CODE
 
-    def build(self, prompts: list[Prompt], output_dir: Path, /) -> list[Path]:
-        """Build Claude Code artifacts from prompts.
-
-        Cleans the output directory before writing. Returns list of
-        paths to generated artifact files.
-        """
+    def build(self, plugins: list[Plugin], output_dir: Path, /) -> list[Path]:
+        """Copy plugin file trees to the Claude Code output directory."""
         self._fs.remove_directory(output_dir)
         generated: list[Path] = []
-        for prompt in prompts:
-            path = self._route(prompt, output_dir)
-            self._fs.write_file(path, prompt.content)
-            generated.append(path)
+        for plugin in plugins:
+            for file_path in plugin.files:
+                src = plugin.source_dir / file_path
+                dst = output_dir / file_path
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+                generated.append(dst)
         return generated
-
-    def _route(self, prompt: Prompt, output_dir: Path, /) -> Path:
-        category_dir = CATEGORY_DIRS.get(prompt.category, prompt.category)
-        return output_dir / category_dir / f"{prompt.filename}{PROMPT_EXTENSION}"

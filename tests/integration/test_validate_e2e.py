@@ -44,9 +44,7 @@ class TestValidateEndToEnd:
         assert result.exit_code == 0
         assert "valid" in result.stdout.lower()
 
-    def test_validate_warns_on_missing_lock_file(
-        self, project_dir: Path
-    ) -> None:
+    def test_validate_warns_on_missing_lock_file(self, project_dir: Path) -> None:
         write_config(project_dir, VALID_CONFIG)
 
         result = runner.invoke(app, ["validate"])
@@ -54,9 +52,7 @@ class TestValidateEndToEnd:
         assert result.exit_code == 0
         assert "lock" in result.output.lower()
 
-    def test_validate_errors_on_undefined_registry(
-        self, project_dir: Path
-    ) -> None:
+    def test_validate_errors_on_undefined_registry(self, project_dir: Path) -> None:
         config_with_bad_registry = """\
 version: 1
 registries:
@@ -74,9 +70,7 @@ platforms:
         assert result.exit_code == 1
         assert "undefined" in result.output.lower()
 
-    def test_validate_warns_on_stale_lock_entries(
-        self, project_dir: Path
-    ) -> None:
+    def test_validate_warns_on_stale_lock_entries(self, project_dir: Path) -> None:
         from datetime import datetime, timezone
 
         # Config with no remote prompts

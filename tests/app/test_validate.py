@@ -108,10 +108,7 @@ class TestRegistryReferences:
         result = use_case.execute(project_dir)
 
         assert not result.is_valid
-        assert any(
-            "unknown-registry" in e.message
-            for e in result.errors
-        )
+        assert any("unknown-registry" in e.message for e in result.errors)
 
 
 class TestLockFreshness:
@@ -122,10 +119,7 @@ class TestLockFreshness:
         result = use_case.execute(project_dir)
 
         assert result.is_valid  # warnings don't make it invalid
-        assert any(
-            "lock" in w.message.lower()
-            for w in result.warnings
-        )
+        assert any("lock" in w.message.lower() for w in result.warnings)
 
     def test_stale_entry_returns_warning(self, project_dir: Path) -> None:
         (project_dir / "promptkit.yaml").write_text(VALID_CONFIG)

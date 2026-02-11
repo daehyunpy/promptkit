@@ -19,18 +19,19 @@ class LockFile:
         """Serialize lock entries to YAML string."""
         prompts_data: list[dict[str, Any]] = []
         for entry in entries:
-            prompts_data.append(
-                {
-                    "name": entry.name,
-                    "source": entry.source,
-                    "hash": entry.content_hash,
-                    "fetched_at": entry.fetched_at.isoformat(),
-                }
-            )
+            entry_data: dict[str, Any] = {
+                "name": entry.name,
+                "source": entry.source,
+                "hash": entry.content_hash,
+                "fetched_at": entry.fetched_at.isoformat(),
+            }
+            if entry.commit_sha is not None:
+                entry_data["commit_sha"] = entry.commit_sha
+            prompts_data.append(entry_data)
 
         data: dict[str, Any] = {
             "version": LOCK_VERSION,
-            "prompts": prompts_data if prompts_data else [],
+            "prompts": prompts_data,
         }
         return yaml.dump(data, sort_keys=False, default_flow_style=False)
 
@@ -56,21 +57,16 @@ class LockFile:
         if not prompts_raw:
             return []
 
-        entries: list[LockEntry] = []
-        for entry_raw in prompts_raw:
-            entries.append(_parse_lock_entry(entry_raw))
-        return entries
+        return [_parse_lock_entry(entry_raw) for entry_raw in prompts_raw]
+
+
+_REQUIRED_LOCK_FIELDS = ("name", "source", "hash", "fetched_at")
 
 
 def _parse_lock_entry(entry: dict[str, Any]) -> LockEntry:
-    if "name" not in entry:
-        raise ValidationError("Lock entry missing required field: 'name'")
-    if "source" not in entry:
-        raise ValidationError("Lock entry missing required field: 'source'")
-    if "hash" not in entry:
-        raise ValidationError("Lock entry missing required field: 'hash'")
-    if "fetched_at" not in entry:
-        raise ValidationError("Lock entry missing required field: 'fetched_at'")
+    for field in _REQUIRED_LOCK_FIELDS:
+        if field not in entry:
+            raise ValidationError(f"Lock entry missing required field: '{field}'")
 
     fetched_at = _parse_datetime(entry["fetched_at"])
 
@@ -79,18 +75,19 @@ def _parse_lock_entry(entry: dict[str, Any]) -> LockEntry:
         source=entry["source"],
         content_hash=entry["hash"],
         fetched_at=fetched_at,
+        commit_sha=entry.get("commit_sha"),
     )
 
 
 def _parse_datetime(value: str | datetime) -> datetime:
     if isinstance(value, datetime):
-        if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value
-    try:
-        dt = datetime.fromisoformat(value)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
-    except (ValueError, TypeError) as e:
-        raise ValidationError(f"Invalid datetime: '{value}'") from e
+        dt = value
+    else:
+        try:
+            dt = datetime.fromisoformat(value)
+        except (ValueError, TypeError) as e:
+            raise ValidationError(f"Invalid datetime: '{value}'") from e
+
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt

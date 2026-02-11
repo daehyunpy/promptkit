@@ -1,10 +1,9 @@
 """Integration test for LockPrompts with real GitHub registry.
 
-This test fetches actual prompts from the claude-plugins-official repository
-to verify the full lock workflow with real data.
+This test fetches actual plugins from the claude-plugins-official repository
+using the production ClaudeMarketplaceFetcher to verify the full lock workflow.
 """
 
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -14,61 +13,17 @@ import pytest
 from promptkit.app.lock import LockPrompts
 from promptkit.domain.errors import SyncError
 from promptkit.domain.lock_entry import LockEntry
-from promptkit.domain.prompt import Prompt
-from promptkit.domain.prompt_spec import PromptSpec
 from promptkit.infra.config.lock_file import LockFile
 from promptkit.infra.config.yaml_loader import YamlLoader
-from promptkit.infra.fetchers.local_file_fetcher import LocalFileFetcher
+from promptkit.infra.fetchers.claude_marketplace import ClaudeMarketplaceFetcher
+from promptkit.infra.fetchers.local_plugin_fetcher import LocalPluginFetcher
 from promptkit.infra.file_system.local import FileSystem
-from promptkit.infra.storage.prompt_cache import PromptCache
+from promptkit.infra.storage.plugin_cache import PluginCache
 
 FIXED_TIME = datetime(2026, 2, 9, 12, 0, 0, tzinfo=timezone.utc)
 
-# GitHub raw content base URL for claude-plugins-official
-GITHUB_RAW_BASE = "https://raw.githubusercontent.com/anthropics/claude-plugins-official/main"
-
-
-class GitHubRegistryFetcher:
-    """Fetcher that retrieves prompts from GitHub-hosted registries.
-
-    This is a minimal implementation for integration testing. The production
-    ClaudeMarketplaceFetcher (Phase 9) will be more sophisticated.
-    """
-
-    def __init__(self, base_url: str) -> None:
-        self._base_url = base_url.rstrip("/")
-
-    def fetch(self, spec: PromptSpec, /) -> Prompt:
-        """Fetch prompt content from GitHub.
-
-        For claude-plugins-official registry, prompts are structured as:
-        plugins/<plugin-name>/agents/<agent-name>.md
-        """
-        prompt_name = spec.prompt_name
-
-        # Try common paths in order of likelihood
-        paths_to_try = [
-            f"plugins/{prompt_name}/agents/{prompt_name}.md",
-            f"plugins/{prompt_name}/skills/{prompt_name}.md",
-            f"plugins/{prompt_name}/commands/{prompt_name}.md",
-            f"{prompt_name}.md",
-        ]
-
-        last_error = None
-        for path in paths_to_try:
-            url = f"{self._base_url}/{path}"
-            try:
-                with urllib.request.urlopen(url) as response:
-                    content = response.read().decode("utf-8")
-                    return Prompt(spec=spec, content=content)
-            except Exception as e:
-                last_error = e
-                continue
-
-        raise SyncError(
-            f"Failed to fetch {spec.source} from GitHub. "
-            f"Tried paths: {paths_to_try}. Last error: {last_error}"
-        )
+REGISTRY_NAME = "claude-plugins-official"
+REGISTRY_URL = "https://github.com/anthropics/claude-plugins-official"
 
 
 @pytest.fixture
@@ -77,19 +32,28 @@ def project_dir(tmp_path: Path) -> Path:
     d = tmp_path / "project"
     d.mkdir()
     (d / "prompts").mkdir()
-    (d / ".promptkit" / "cache").mkdir(parents=True)
+    (d / ".promptkit" / "cache" / "plugins").mkdir(parents=True)
     return d
 
 
 @pytest.fixture
-def github_fetcher() -> GitHubRegistryFetcher:
-    """Create a GitHub registry fetcher for claude-plugins-official."""
-    return GitHubRegistryFetcher(GITHUB_RAW_BASE)
+def plugin_cache(project_dir: Path) -> PluginCache:
+    return PluginCache(project_dir / ".promptkit" / "cache" / "plugins")
+
+
+@pytest.fixture
+def marketplace_fetcher(plugin_cache: PluginCache) -> ClaudeMarketplaceFetcher:
+    """Create a real ClaudeMarketplaceFetcher for claude-plugins-official."""
+    return ClaudeMarketplaceFetcher(
+        registry_url=REGISTRY_URL,
+        registry_name=REGISTRY_NAME,
+        cache=plugin_cache,
+    )
 
 
 def _make_lock_prompts(
     project_dir: Path,
-    fetchers: dict[str, GitHubRegistryFetcher],
+    fetchers: dict[str, ClaudeMarketplaceFetcher],
 ) -> LockPrompts:
     """Create a LockPrompts use case instance."""
     fs = FileSystem()
@@ -97,8 +61,7 @@ def _make_lock_prompts(
         file_system=fs,
         yaml_loader=YamlLoader(),
         lock_file=LockFile(),
-        prompt_cache=PromptCache(fs, project_dir / ".promptkit" / "cache"),
-        local_fetcher=LocalFileFetcher(fs, project_dir / "prompts"),
+        local_fetcher=LocalPluginFetcher(fs, project_dir / "prompts"),
         fetchers=fetchers,
     )
 
@@ -114,15 +77,15 @@ class TestLockWithRealRegistry:
     """Integration tests that fetch from real GitHub registry."""
 
     def test_lock_code_simplifier_from_claude_plugins_official(
-        self, project_dir: Path, github_fetcher: GitHubRegistryFetcher
+        self, project_dir: Path, marketplace_fetcher: ClaudeMarketplaceFetcher
     ) -> None:
-        """Test locking the code-simplifier agent from claude-plugins-official.
+        """Test locking the code-simplifier plugin from claude-plugins-official.
 
         This verifies:
-        1. Real GitHub fetch works
-        2. Content is cached correctly
+        1. Real GitHub fetch via ClaudeMarketplaceFetcher works
+        2. Files are cached in plugin cache
         3. Lock file is created with proper entries
-        4. Content hash is computed from real content
+        4. commit_sha is recorded (full 40-char SHA)
         """
         config_yaml = """\
 version: 1
@@ -137,7 +100,7 @@ platforms:
 
         use_case = _make_lock_prompts(
             project_dir,
-            {"claude-plugins-official": github_fetcher},
+            {REGISTRY_NAME: marketplace_fetcher},
         )
 
         with patch("promptkit.app.lock._now", return_value=FIXED_TIME):
@@ -153,66 +116,28 @@ platforms:
         entry = entries[0]
         assert entry.name == "code-simplifier"
         assert entry.source == "claude-plugins-official/code-simplifier"
-        assert entry.content_hash.startswith("sha256:")
+        assert entry.commit_sha is not None
+        assert len(entry.commit_sha) == 40
         assert entry.fetched_at == FIXED_TIME
 
-        # Verify content was cached
-        cache_dir = project_dir / ".promptkit" / "cache"
-        cache_files = list(cache_dir.glob("sha256-*.md"))
-        assert len(cache_files) == 1
-
-        # Verify cached content matches what we expect
-        cached_content = cache_files[0].read_text()
-        assert "code-simplifier" in cached_content.lower()
-        assert "---" in cached_content  # Has frontmatter
-        assert "name: code-simplifier" in cached_content
-
-        # Verify content is substantial (the real agent prompt is ~500+ lines)
-        assert len(cached_content) > 1000
-
-    def test_lock_multiple_prompts_from_real_registry(
-        self, project_dir: Path, github_fetcher: GitHubRegistryFetcher
-    ) -> None:
-        """Test locking multiple prompts from the real registry.
-
-        This tests that the fetcher can handle multiple prompts in sequence.
-        Note: Only using code-simplifier for now since we know it exists.
-        Add more prompts here as they become available in the registry.
-        """
-        config_yaml = """\
-version: 1
-registries:
-  claude-plugins-official: https://github.com/anthropics/claude-plugins-official
-prompts:
-  - claude-plugins-official/code-simplifier
-platforms:
-  cursor:
-"""
-        (project_dir / "promptkit.yaml").write_text(config_yaml)
-
-        use_case = _make_lock_prompts(
-            project_dir,
-            {"claude-plugins-official": github_fetcher},
+        # Verify files are cached on disk
+        cache_dir = (
+            project_dir
+            / ".promptkit"
+            / "cache"
+            / "plugins"
+            / REGISTRY_NAME
+            / "code-simplifier"
+            / entry.commit_sha
         )
+        assert cache_dir.is_dir()
+        cached_files = list(cache_dir.rglob("*"))
+        assert any(f.is_file() for f in cached_files)
 
-        with patch("promptkit.app.lock._now", return_value=FIXED_TIME):
-            use_case.execute(project_dir)
-
-        entries = _read_lock_entries(project_dir)
-        assert len(entries) >= 1
-
-        # Verify all entries have valid hashes
-        for entry in entries:
-            assert entry.content_hash.startswith("sha256:")
-            assert len(entry.content_hash) == len("sha256:") + 64  # SHA256 hex
-
-    def test_lock_preserves_timestamp_on_re_fetch(
-        self, project_dir: Path, github_fetcher: GitHubRegistryFetcher
+    def test_lock_preserves_timestamp_on_re_lock(
+        self, project_dir: Path, marketplace_fetcher: ClaudeMarketplaceFetcher
     ) -> None:
-        """Test that re-locking preserves timestamp when content unchanged.
-
-        This verifies the timestamp preservation logic works with real data.
-        """
+        """Test that re-locking preserves timestamp when commit unchanged."""
         config_yaml = """\
 version: 1
 registries:
@@ -226,7 +151,7 @@ platforms:
 
         use_case = _make_lock_prompts(
             project_dir,
-            {"claude-plugins-official": github_fetcher},
+            {REGISTRY_NAME: marketplace_fetcher},
         )
 
         # First lock
@@ -237,25 +162,25 @@ platforms:
         first_entries = _read_lock_entries(project_dir)
         assert first_entries[0].fetched_at == first_time
 
-        # Second lock (content should be identical)
+        # Second lock (commit SHA should be identical)
         second_time = datetime(2026, 2, 1, 0, 0, 0, tzinfo=timezone.utc)
         with patch("promptkit.app.lock._now", return_value=second_time):
             use_case.execute(project_dir)
 
         second_entries = _read_lock_entries(project_dir)
-        # Timestamp should be preserved since content hasn't changed
+        # Timestamp preserved since commit_sha hasn't changed
         assert second_entries[0].fetched_at == first_time
 
-    def test_lock_with_nonexistent_prompt_raises_error(
-        self, project_dir: Path, github_fetcher: GitHubRegistryFetcher
+    def test_lock_with_nonexistent_plugin_raises_error(
+        self, project_dir: Path, marketplace_fetcher: ClaudeMarketplaceFetcher
     ) -> None:
-        """Test that fetching a non-existent prompt raises SyncError."""
+        """Test that fetching a non-existent plugin raises SyncError."""
         config_yaml = """\
 version: 1
 registries:
   claude-plugins-official: https://github.com/anthropics/claude-plugins-official
 prompts:
-  - claude-plugins-official/this-prompt-does-not-exist-xyz123
+  - claude-plugins-official/this-plugin-does-not-exist-xyz123
 platforms:
   cursor:
 """
@@ -263,8 +188,8 @@ platforms:
 
         use_case = _make_lock_prompts(
             project_dir,
-            {"claude-plugins-official": github_fetcher},
+            {REGISTRY_NAME: marketplace_fetcher},
         )
 
-        with pytest.raises(SyncError, match="Failed to fetch"):
+        with pytest.raises(SyncError):
             use_case.execute(project_dir)

@@ -1,27 +1,25 @@
 """Infrastructure layer: Cursor platform artifact builder."""
 
+import shutil
 from pathlib import Path
 
 from promptkit.domain.file_system import FileSystem
 from promptkit.domain.platform_target import PlatformTarget
-from promptkit.domain.prompt import Prompt
+from promptkit.domain.plugin import Plugin
 
-PROMPT_EXTENSION = ".md"
-
-CATEGORY_DIRS: dict[str, str] = {
+CATEGORY_MAPPING: dict[str, str] = {
     "skills": "skills-cursor",
-    "rules": "rules",
-    "agents": "agents",
-    "commands": "commands",
-    "subagents": "subagents",
 }
+
+SKIPPED_CATEGORIES = {"agents", "commands", "hooks"}
 
 
 class CursorBuilder:
-    """Builds .cursor/ artifacts from prompts using directory-based routing.
+    """Builds .cursor/ artifacts by copying plugin file trees.
 
-    Implements the ArtifactBuilder protocol. Maps prompt categories to
-    Cursor-specific output directories (e.g., skills → skills-cursor).
+    Implements the ArtifactBuilder protocol. Applies directory mapping
+    (skills → skills-cursor) and skips unsupported categories (agents,
+    commands, hooks).
     """
 
     def __init__(self, file_system: FileSystem, /) -> None:
@@ -31,20 +29,37 @@ class CursorBuilder:
     def platform(self) -> PlatformTarget:
         return PlatformTarget.CURSOR
 
-    def build(self, prompts: list[Prompt], output_dir: Path, /) -> list[Path]:
-        """Build Cursor artifacts from prompts.
-
-        Cleans the output directory before writing. Returns list of
-        paths to generated artifact files.
-        """
+    def build(self, plugins: list[Plugin], output_dir: Path, /) -> list[Path]:
+        """Copy plugin file trees to the Cursor output directory."""
         self._fs.remove_directory(output_dir)
         generated: list[Path] = []
-        for prompt in prompts:
-            path = self._route(prompt, output_dir)
-            self._fs.write_file(path, prompt.content)
-            generated.append(path)
+        for plugin in plugins:
+            for file_path in plugin.files:
+                mapped = self._map_path(file_path)
+                if mapped is None:
+                    continue
+                src = plugin.source_dir / file_path
+                dst = output_dir / mapped
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+                generated.append(dst)
         return generated
 
-    def _route(self, prompt: Prompt, output_dir: Path, /) -> Path:
-        category_dir = CATEGORY_DIRS.get(prompt.category, prompt.category)
-        return output_dir / category_dir / f"{prompt.filename}{PROMPT_EXTENSION}"
+    @staticmethod
+    def _map_path(file_path: str, /) -> str | None:
+        """Map a file path for Cursor, applying directory renames and filtering.
+
+        Returns None if the file should be skipped.
+        """
+        if "/" not in file_path:
+            return file_path
+
+        top_dir, rest = file_path.split("/", 1)
+
+        if top_dir in SKIPPED_CATEGORIES:
+            return None
+
+        if top_dir in CATEGORY_MAPPING:
+            return f"{CATEGORY_MAPPING[top_dir]}/{rest}"
+
+        return file_path

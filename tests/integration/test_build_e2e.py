@@ -51,7 +51,7 @@ def _init_and_lock(project_dir: Path, config: str, prompts: dict[str, str]) -> N
 class TestBuildEndToEnd:
     """Integration tests that verify build generates real platform artifacts."""
 
-    def test_build_generates_cursor_rules_from_local_prompt(
+    def test_build_generates_cursor_artifact_from_local_prompt(
         self, project_dir: Path
     ) -> None:
         _init_and_lock(
@@ -63,11 +63,11 @@ class TestBuildEndToEnd:
         result = runner.invoke(app, ["build"])
 
         assert result.exit_code == 0
-        artifact = project_dir / ".cursor" / "rules" / "my-rule.md"
+        artifact = project_dir / ".cursor" / "my-rule.md"
         assert artifact.exists()
         assert "Follow this rule." in artifact.read_text()
 
-    def test_build_generates_claude_code_rules_from_local_prompt(
+    def test_build_generates_claude_code_artifact_from_local_prompt(
         self, project_dir: Path
     ) -> None:
         _init_and_lock(
@@ -79,7 +79,7 @@ class TestBuildEndToEnd:
         result = runner.invoke(app, ["build"])
 
         assert result.exit_code == 0
-        artifact = project_dir / ".claude" / "rules" / "my-rule.md"
+        artifact = project_dir / ".claude" / "my-rule.md"
         assert artifact.exists()
         assert "Follow this rule." in artifact.read_text()
 
@@ -95,8 +95,8 @@ class TestBuildEndToEnd:
         result = runner.invoke(app, ["build"])
 
         assert result.exit_code == 0
-        assert (project_dir / ".cursor" / "rules" / "my-rule.md").exists()
-        assert (project_dir / ".claude" / "rules" / "my-rule.md").exists()
+        assert (project_dir / ".cursor" / "my-rule.md").exists()
+        assert (project_dir / ".claude" / "my-rule.md").exists()
 
     def test_build_fails_without_lock_file(self, project_dir: Path) -> None:
         write_config(project_dir, BOTH_PLATFORMS_CONFIG)
