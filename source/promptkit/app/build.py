@@ -1,6 +1,7 @@
 """Application layer: BuildArtifacts use case."""
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 from promptkit.domain.errors import BuildError
@@ -18,6 +19,14 @@ CONFIG_FILENAME = "promptkit.yaml"
 LOCK_FILENAME = "promptkit.lock"
 PROMPTS_DIR = "prompts"
 LOCAL_SOURCE_PREFIX = "local/"
+
+
+@dataclass(frozen=True)
+class BuildResult:
+    """Statistics from a build operation."""
+
+    plugin_count: int
+    platform_count: int
 
 
 class BuildArtifacts:
@@ -38,8 +47,12 @@ class BuildArtifacts:
         self._plugin_cache = plugin_cache
         self._builders = builders
 
-    def execute(self, project_dir: Path, /) -> None:
-        """Load config and lock, resolve plugins, delegate to builders."""
+    def execute(self, project_dir: Path, /) -> BuildResult:
+        """Load config and lock, resolve plugins, delegate to builders.
+
+        Returns:
+            Build statistics (plugin count, platform count).
+        """
         config = self._load_config(project_dir)
         entries = self._load_lock(project_dir)
         specs_by_source = {s.source: s for s in config.prompt_specs}
@@ -49,6 +62,7 @@ class BuildArtifacts:
             for entry in entries
         ]
 
+        platform_count = 0
         for platform_config in config.platform_configs:
             builder = self._builders.get(platform_config.platform_type)
             if builder is None:
@@ -60,6 +74,12 @@ class BuildArtifacts:
             ]
             output_dir = project_dir / platform_config.output_dir
             builder.build(filtered, output_dir, project_dir)
+            platform_count += 1
+
+        return BuildResult(
+            plugin_count=len(plugins),
+            platform_count=platform_count,
+        )
 
     def _resolve_plugin(
         self,
@@ -120,7 +140,12 @@ class BuildArtifacts:
 
     def _load_config(self, project_dir: Path, /) -> LoadedConfig:
         config_path = project_dir / CONFIG_FILENAME
-        yaml_content = self._fs.read_file(config_path)
+        try:
+            yaml_content = self._fs.read_file(config_path)
+        except FileNotFoundError:
+            raise BuildError(
+                f"{CONFIG_FILENAME} not found. Run 'promptkit init' to create a new project."
+            ) from None
         return self._yaml_loader.load(yaml_content)
 
     def _load_lock(self, project_dir: Path, /) -> list[LockEntry]:

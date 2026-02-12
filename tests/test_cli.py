@@ -28,6 +28,14 @@ def test_init_command_can_be_invoked() -> None:
     assert result.exit_code == 0
 
 
+def test_app_help_shows_workflow_guidance() -> None:
+    """App help should mention the init-to-sync workflow."""
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "promptkit init" in result.stdout
+    assert "promptkit sync" in result.stdout
+
+
 def test_init_command_shows_help_text() -> None:
     """init command should show helpful documentation."""
     result = runner.invoke(app, ["--help"])
@@ -118,18 +126,44 @@ def test_lock_succeeds_with_local_prompts(working_dir: Path) -> None:
     result = runner.invoke(app, ["lock"])
 
     assert result.exit_code == 0
-    assert "Locked" in result.stdout
+    assert "Locked 1 plugin" in result.stdout
     lock_content = yaml.safe_load((working_dir / "promptkit.lock").read_text())
     assert len(lock_content["prompts"]) == 1
     assert lock_content["prompts"][0]["source"] == "local/rules/my-rule"
 
 
 def test_lock_fails_without_config(working_dir: Path) -> None:
-    """lock command should fail when no promptkit.yaml exists."""
+    """lock command should show friendly error for missing config."""
     result = runner.invoke(app, ["lock"])
 
     assert result.exit_code == 1
-    assert "Error" in result.output
+    assert "promptkit.yaml not found" in result.output
+    assert "promptkit init" in result.output
+
+
+def test_lock_success_shows_plugin_count(working_dir: Path) -> None:
+    """lock command should show how many plugins were locked."""
+    _scaffold_project(working_dir)
+    (working_dir / "prompts" / "rules").mkdir(parents=True, exist_ok=True)
+    (working_dir / "prompts" / "rules" / "rule-a.md").write_text("# A")
+    (working_dir / "prompts" / "rules" / "rule-b.md").write_text("# B")
+
+    result = runner.invoke(app, ["lock"])
+
+    assert result.exit_code == 0
+    assert "Locked 2 plugins" in result.stdout
+
+
+def test_lock_success_shows_singular_plugin(working_dir: Path) -> None:
+    """lock command should use singular 'plugin' for count of 1."""
+    _scaffold_project(working_dir)
+    (working_dir / "prompts" / "rules").mkdir(parents=True, exist_ok=True)
+    (working_dir / "prompts" / "rules" / "my-rule.md").write_text("# Rule")
+
+    result = runner.invoke(app, ["lock"])
+
+    assert result.exit_code == 0
+    assert "Locked 1 plugin" in result.stdout
 
 
 def test_lock_succeeds_with_no_prompts(working_dir: Path) -> None:
@@ -164,31 +198,46 @@ def test_build_succeeds_with_local_prompts(working_dir: Path) -> None:
     result = runner.invoke(app, ["build"])
 
     assert result.exit_code == 0
-    assert "Built" in result.stdout
+    assert "Built 1 plugin for 2 platforms" in result.stdout
     assert (working_dir / ".cursor" / "rules" / "my-rule.md").exists()
     assert (working_dir / ".claude" / "rules" / "my-rule.md").exists()
 
 
 def test_build_fails_without_lock_file(working_dir: Path) -> None:
-    """build command should fail when promptkit.lock is missing."""
+    """build command should show operation context in error."""
     _scaffold_project(working_dir)
     (working_dir / "promptkit.lock").unlink()
 
     result = runner.invoke(app, ["build"])
 
     assert result.exit_code == 1
-    assert "Error" in result.output
+    assert "Error building artifacts:" in result.output
 
 
 def test_build_fails_without_config(working_dir: Path) -> None:
-    """build command should fail when promptkit.yaml is missing."""
+    """build command should show friendly error for missing config."""
     result = runner.invoke(app, ["build"])
 
     assert result.exit_code == 1
-    assert "Error" in result.output
+    assert "promptkit.yaml not found" in result.output
+    assert "promptkit init" in result.output
 
 
 # --- sync command ---
+
+
+def test_sync_help_describes_all_in_one() -> None:
+    """sync help should describe it as the all-in-one command."""
+    result = runner.invoke(app, ["sync", "--help"])
+    assert result.exit_code == 0
+    assert "all-in-one" in result.stdout.lower()
+
+
+def test_build_help_mentions_offline() -> None:
+    """build help should note it works without network."""
+    result = runner.invoke(app, ["build", "--help"])
+    assert result.exit_code == 0
+    assert "no network" in result.stdout.lower() or "offline" in result.stdout.lower()
 
 
 def test_sync_command_shows_in_help() -> None:
@@ -217,11 +266,12 @@ def test_sync_succeeds_with_local_prompts(working_dir: Path) -> None:
 
 
 def test_sync_fails_without_config(working_dir: Path) -> None:
-    """sync command should fail when no promptkit.yaml exists."""
+    """sync command should show friendly error for missing config."""
     result = runner.invoke(app, ["sync"])
 
     assert result.exit_code == 1
-    assert "Error" in result.output
+    assert "promptkit.yaml not found" in result.output
+    assert "promptkit init" in result.output
 
 
 def test_sync_lock_failure_skips_build(working_dir: Path) -> None:

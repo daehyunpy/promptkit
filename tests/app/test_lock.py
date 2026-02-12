@@ -284,6 +284,36 @@ class TestStaleEntryRemoval:
         assert len(entries) == 0
 
 
+class TestMissingConfig:
+    def test_raises_sync_error_for_missing_config(self, project_dir: Path) -> None:
+        use_case = _make_lock_prompts(project_dir)
+
+        with pytest.raises(SyncError, match="promptkit.yaml not found"):
+            use_case.execute(project_dir)
+
+
+class TestExecuteReturnsPluginCount:
+    def test_returns_count_of_locked_plugins(self, project_dir: Path) -> None:
+        (project_dir / "promptkit.yaml").write_text(CONFIG_WITH_NO_PROMPTS)
+        (project_dir / "prompts" / "rule-a.md").write_text("# A")
+        (project_dir / "prompts" / "rule-b.md").write_text("# B")
+        use_case = _make_lock_prompts(project_dir)
+
+        with patch("promptkit.app.lock._now", return_value=FIXED_TIME):
+            count = use_case.execute(project_dir)
+
+        assert count == 2
+
+    def test_returns_zero_when_no_plugins(self, project_dir: Path) -> None:
+        (project_dir / "promptkit.yaml").write_text(CONFIG_WITH_NO_PROMPTS)
+        use_case = _make_lock_prompts(project_dir)
+
+        with patch("promptkit.app.lock._now", return_value=FIXED_TIME):
+            count = use_case.execute(project_dir)
+
+        assert count == 0
+
+
 class TestNoExistingLockFile:
     def test_works_without_existing_lock(self, project_dir: Path) -> None:
         (project_dir / "promptkit.yaml").write_text(CONFIG_WITH_ONE_REMOTE)

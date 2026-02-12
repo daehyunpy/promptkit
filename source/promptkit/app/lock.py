@@ -46,8 +46,12 @@ class LockPrompts:
         self._local_fetcher = local_fetcher
         self._fetchers = fetchers
 
-    def execute(self, project_dir: Path, /) -> None:
-        """Fetch all plugins and write updated lock file."""
+    def execute(self, project_dir: Path, /) -> int:
+        """Fetch all plugins and write updated lock file.
+
+        Returns:
+            Number of plugins locked.
+        """
         config = self._load_config(project_dir)
         existing_entries = self._load_existing_lock(project_dir)
         existing_by_source = {e.source: e for e in existing_entries}
@@ -66,6 +70,7 @@ class LockPrompts:
         entries.sort(key=lambda e: e.name)
         lock_content = self._lock_file.serialize(entries)
         self._fs.write_file(project_dir / LOCK_FILENAME, lock_content)
+        return len(entries)
 
     def _resolve_fetcher(self, registry_name: str, /) -> PluginFetcher:
         if registry_name not in self._fetchers:
@@ -132,7 +137,12 @@ class LockPrompts:
 
     def _load_config(self, project_dir: Path, /) -> LoadedConfig:
         config_path = project_dir / CONFIG_FILENAME
-        yaml_content = self._fs.read_file(config_path)
+        try:
+            yaml_content = self._fs.read_file(config_path)
+        except FileNotFoundError:
+            raise SyncError(
+                f"{CONFIG_FILENAME} not found. Run 'promptkit init' to create a new project."
+            ) from None
         return self._yaml_loader.load(yaml_content)
 
     def _load_existing_lock(self, project_dir: Path, /) -> list[LockEntry]:

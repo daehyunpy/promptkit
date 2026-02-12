@@ -208,6 +208,58 @@ class TestBuildRegistryPlugin:
             use_case.execute(project_dir)
 
 
+class TestMissingConfig:
+    def test_raises_build_error_for_missing_config(self, project_dir: Path) -> None:
+        use_case = _make_build(project_dir)
+
+        with pytest.raises(BuildError, match="promptkit.yaml not found"):
+            use_case.execute(project_dir)
+
+
+class TestExecuteReturnsBuildResult:
+    def test_returns_plugin_and_platform_counts(self, project_dir: Path) -> None:
+        (project_dir / "promptkit.yaml").write_text(CONFIG_BOTH_PLATFORMS)
+        (project_dir / "prompts" / "rules").mkdir()
+        (project_dir / "prompts" / "rules" / "my-rule.md").write_text("# Rule")
+        _write_lock(
+            project_dir,
+            [
+                {
+                    "name": "my-rule",
+                    "source": "local/rules/my-rule",
+                    "hash": "sha256:abc",
+                },
+            ],
+        )
+        use_case = _make_build(project_dir)
+
+        result = use_case.execute(project_dir)
+
+        assert result.plugin_count == 1
+        assert result.platform_count == 2
+
+    def test_returns_single_platform_count(self, project_dir: Path) -> None:
+        (project_dir / "promptkit.yaml").write_text(CONFIG_CURSOR_ONLY)
+        (project_dir / "prompts" / "rules").mkdir()
+        (project_dir / "prompts" / "rules" / "my-rule.md").write_text("# Rule")
+        _write_lock(
+            project_dir,
+            [
+                {
+                    "name": "my-rule",
+                    "source": "local/rules/my-rule",
+                    "hash": "sha256:abc",
+                },
+            ],
+        )
+        use_case = _make_build(project_dir)
+
+        result = use_case.execute(project_dir)
+
+        assert result.plugin_count == 1
+        assert result.platform_count == 1
+
+
 class TestPlatformFiltering:
     def test_filters_plugins_by_platform(self, project_dir: Path) -> None:
         config = """\

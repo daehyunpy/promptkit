@@ -25,7 +25,16 @@ from promptkit.infra.fetchers.local_plugin_fetcher import LocalPluginFetcher
 from promptkit.infra.file_system.local import FileSystem
 from promptkit.infra.storage.plugin_cache import PluginCache
 
-app = typer.Typer(help="Package manager for AI prompts")
+app = typer.Typer(
+    help="Package manager for AI prompts.\n\nRun 'promptkit init' to create a project, then 'promptkit sync' to fetch and build."
+)
+
+
+def _pluralize(count: int, singular: str) -> str:
+    """Return '1 plugin' or '3 plugins' based on count."""
+    if count == 1:
+        return f"{count} {singular}"
+    return f"{count} {singular}s"
 
 PLUGIN_CACHE_DIR = ".promptkit/cache/plugins"
 REGISTRIES_DIR = ".promptkit/registries"
@@ -128,39 +137,50 @@ def lock() -> None:
     try:
         cwd = Path.cwd()
         fs = FileSystem()
-        _make_lock_use_case(cwd, fs).execute(cwd)
-        typer.echo("Locked promptkit.lock")
-    except (PromptError, FileNotFoundError) as e:
-        typer.echo(f"Error: {e}", err=True)
+        count = _make_lock_use_case(cwd, fs).execute(cwd)
+        typer.echo(f"Locked {_pluralize(count, 'plugin')}")
+    except PromptError as e:
+        typer.echo(f"Error locking prompts: {e}", err=True)
         raise typer.Exit(code=1)
 
 
 @app.command()
 def build() -> None:
-    """Generate platform-specific artifacts from cached prompts."""
+    """Generate platform-specific artifacts from cached prompts (no network)."""
     try:
         cwd = Path.cwd()
         fs = FileSystem()
-        _make_build_use_case(cwd, fs).execute(cwd)
-        typer.echo("Built platform artifacts")
-    except (PromptError, FileNotFoundError) as e:
-        typer.echo(f"Error: {e}", err=True)
+        result = _make_build_use_case(cwd, fs).execute(cwd)
+        plugins = _pluralize(result.plugin_count, "plugin")
+        platforms = _pluralize(result.platform_count, "platform")
+        typer.echo(f"Built {plugins} for {platforms}")
+    except PromptError as e:
+        typer.echo(f"Error building artifacts: {e}", err=True)
         raise typer.Exit(code=1)
 
 
 @app.command()
 def sync() -> None:
-    """Fetch prompts, update lock file, and generate artifacts."""
+    """Fetch, lock, and build in one step (all-in-one)."""
+    cwd = Path.cwd()
+    fs = FileSystem()
+
     try:
-        cwd = Path.cwd()
-        fs = FileSystem()
         typer.echo("Locking prompts...")
-        _make_lock_use_case(cwd, fs).execute(cwd)
+        count = _make_lock_use_case(cwd, fs).execute(cwd)
+        typer.echo(f"Locked {_pluralize(count, 'plugin')}")
+    except PromptError as e:
+        typer.echo(f"Error locking prompts: {e}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
         typer.echo("Building artifacts...")
-        _make_build_use_case(cwd, fs).execute(cwd)
-        typer.echo("Synced prompts and built artifacts")
-    except (PromptError, FileNotFoundError) as e:
-        typer.echo(f"Error: {e}", err=True)
+        result = _make_build_use_case(cwd, fs).execute(cwd)
+        plugins = _pluralize(result.plugin_count, "plugin")
+        platforms = _pluralize(result.platform_count, "platform")
+        typer.echo(f"Built {plugins} for {platforms}")
+    except PromptError as e:
+        typer.echo(f"Error building artifacts: {e}", err=True)
         raise typer.Exit(code=1)
 
 
