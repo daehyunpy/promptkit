@@ -15,7 +15,7 @@ Read both before making changes.
 
 ## Current State
 
-**MVP phases 1-9 complete. Phase 10 (polish) up next.** 272 tests passing.
+**MVP phases 1-10 complete.** 296 tests passing.
 
 **Completed:**
 - Phase 1-2: Project scaffold + `promptkit init` command
@@ -26,11 +26,7 @@ Read both before making changes.
 - Phase 7: Sync command (compose lock + build)
 - Phase 8: Validate command
 - Phase 9: Claude Marketplace Fetcher — unified `Plugin` model, `ClaudeMarketplaceFetcher`, directory-based `PluginCache`, multi-file local plugins
-
-**Up Next — Phase 10: Polish**
-- Error messages
-- CLI help text
-- Progress indicators
+- Phase 10: Polish — contextual error messages, success counts (`BuildResult`), friendly `FileNotFoundError` handling, improved CLI help text
 
 ## Tech Stack
 
