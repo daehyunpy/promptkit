@@ -247,6 +247,22 @@ The MVP is complete when:
 7. Validation catches config errors before build
 8. Init command scaffolds project structure
 
+## Roadmap (Post-MVP)
+
+MVP is complete. Items below are prioritized for post-MVP development.
+
+| # | Item | Category | Description |
+|---|------|----------|-------------|
+| 1 | Platform-specific frontmatter | Core | Strip unsupported fields per platform, platform overrides, validate frontmatter, transform between formats (e.g., Cursor `.mdc` rules vs Claude Code rules) |
+| 2 | Build output collision | Bug fix | Two plugins with same relative path silently overwrite. Fix: prefix output paths with plugin name |
+| 3 | `list` and `status` commands | UX | `list`: show locked plugins, sources, SHAs. `status`: show drift between config, lock, and cache |
+| 4 | `add` / `remove` commands | UX | `add <source>`: append to config + lock. `remove <plugin>`: remove from config + clean artifacts |
+| 5 | `--verbose`, `--quiet`, `--dry-run` flags | UX | Verbosity control and safe preview mode for sync/lock/build |
+| 6 | Validation gaps | Robustness | Duplicate plugin/platform detection, unused registry/platform warnings, registry URL validation |
+| 7 | Atomic lock file writes | Robustness | Write to temp file + rename to prevent corruption from concurrent runs |
+| 8 | Zip-packaged skills | Compatibility | Handle `.zip` skill format from Claude marketplace |
+| 9 | Missing builder categories | Compatibility | Support `hooks`, `scripts`, `mcp`, `lsp` in builders (currently deferred) |
+
 ## OpenSpec
 
 This project uses OpenSpec for spec-driven development. All non-trivial changes go through this workflow. Trivial fixes (typos, single-line bugs) can skip it.
