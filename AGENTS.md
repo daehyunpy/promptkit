@@ -263,6 +263,7 @@ MVP is complete. Items below are prioritized for post-MVP development.
 | 7 | Atomic lock file writes | Robustness | Write to temp file + rename to prevent corruption from concurrent runs |
 | 8 | Zip-packaged skills | Compatibility | Handle `.zip` skill format from Claude marketplace |
 | 9 | Missing builder categories | Compatibility | Support `hooks`, `scripts`, `mcp`, `lsp` in builders (currently deferred) |
+| 10 | Example prompts in marketplace format | DX | Add sample prompts in marketplace format under `prompts/` for reference/testing, but exclude them from promptkit's own builds |
 
 ## OpenSpec
 
