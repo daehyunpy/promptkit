@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: CodexBuilder copies only skills category files
-The `CodexBuilder` SHALL implement the `ArtifactBuilder` protocol and copy only files under the `skills/` category directory to `.agents/`. Files outside the `skills/` category (e.g., `commands/`, `agents/`, `rules/`, `README.md`) SHALL be skipped. Directory structure within `skills/` is preserved as-is.
+The `CodexBuilder` SHALL implement the `ArtifactBuilder` protocol and copy only files under the `skills/` category directory to `.codex/`. Files outside the `skills/` category (e.g., `commands/`, `agents/`, `rules/`, `README.md`) SHALL be skipped. Directory structure within `skills/` is preserved as-is.
 
 #### Scenario: Copy files in skills category
 - **WHEN** a plugin contains files in `skills/my-skill/SKILL.md` and `skills/another/SKILL.md`
@@ -67,15 +67,15 @@ The `PlatformTarget` enum SHALL include a `CODEX` member with string value `"cod
 - **THEN** `PlatformTarget.CODEX` is returned
 
 ### Requirement: YAML config loader recognizes codex platform
-The YAML config loader SHALL accept `codex` as a valid platform key under `platforms:` and resolve it to `PlatformTarget.CODEX`. The default output directory for Codex SHALL be `.agents`.
+The YAML config loader SHALL accept `codex` as a valid platform key under `platforms:` and resolve it to `PlatformTarget.CODEX`. The default output directory for Codex SHALL be `.codex`.
 
 #### Scenario: Codex platform in config with default output dir
 - **WHEN** `promptkit.yaml` contains `platforms: { codex: }` with no explicit output dir
-- **THEN** the loader produces a `PlatformConfig` with `platform_type=PlatformTarget.CODEX` and `output_dir=".agents"`
+- **THEN** the loader produces a `PlatformConfig` with `platform_type=PlatformTarget.CODEX` and `output_dir=".codex"`
 
 #### Scenario: Codex platform with custom output dir
-- **WHEN** `promptkit.yaml` contains `platforms: { codex: .my-agents }`
-- **THEN** the loader produces a `PlatformConfig` with `output_dir=".my-agents"`
+- **WHEN** `promptkit.yaml` contains `platforms: { codex: .my-codex }`
+- **THEN** the loader produces a `PlatformConfig` with `output_dir=".my-codex"`
 
 #### Scenario: Codex is not a default platform
 - **WHEN** `promptkit.yaml` has no `platforms:` key

@@ -10,14 +10,14 @@
 
 ## 3. Config & Wiring
 
-- [ ] 3.1 Add `PlatformTarget.CODEX: ".agents"` to `DEFAULT_OUTPUT_DIRS` in `source/promptkit/infra/config/yaml_loader.py`
-- [ ] 3.2 Update YAML loader tests — verify `codex` is accepted as a platform key, defaults to `.agents` output dir, is NOT included in default platform configs
+- [ ] 3.1 Add `PlatformTarget.CODEX: ".codex"` to `DEFAULT_OUTPUT_DIRS` in `source/promptkit/infra/config/yaml_loader.py`
+- [ ] 3.2 Update YAML loader tests — verify `codex` is accepted as a platform key, defaults to `.codex` output dir, is NOT included in default platform configs
 - [ ] 3.3 Register `PlatformTarget.CODEX: CodexBuilder(fs)` in `_make_build_use_case()` in `source/promptkit/cli.py`
 
 ## 4. Clean Use Case
 
-- [ ] 4.1 Add `"codex": ".agents"` to `PLATFORM_OUTPUT_DIRS` in `source/promptkit/app/clean.py`
-- [ ] 4.2 Update clean tests to verify Codex manifest (`codex.txt`) is discovered and `.agents/` files are cleaned
+- [ ] 4.1 Add `"codex": ".codex"` to `PLATFORM_OUTPUT_DIRS` in `source/promptkit/app/clean.py`
+- [ ] 4.2 Update clean tests to verify Codex manifest (`codex.txt`) is discovered and `.codex/` files are cleaned
 
 ## 5. Verification
 
