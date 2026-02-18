@@ -108,6 +108,26 @@ enabled = false
 
 ---
 
+## Slash Commands
+
+Codex has built-in slash commands (CLI features, not file-based artifacts):
+
+| Command | Description |
+|---------|-------------|
+| `/plan` | Switch conversation to plan mode |
+| `/review` | Launch code review on a selected diff |
+| `/model` | Switch models or adjust reasoning levels |
+| `/personality` | Change communication style (friendly, pragmatic, none) |
+| `/skill` | Browse, enable, or disable individual skills |
+| `/permissions` | Manage approval policy settings |
+| `/m_update`, `/m_drop` | Memory management (TUI) |
+| `/quit` / `/exit` | Exit Codex |
+| `/logout` | Clear local credentials |
+
+User-defined slash commands were the deprecated custom prompts (see below). Skills use `$skill-name` syntax for explicit invocation, not `/` prefix.
+
+---
+
 ## Instruction Discovery (AGENTS.md)
 
 Codex builds an instruction chain at startup:
