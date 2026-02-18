@@ -150,17 +150,48 @@ Key config areas:
 
 ---
 
-## What Codex DOESN'T Have (vs Claude Code)
+## Feature Comparison (vs Claude Code)
 
-| Feature | Claude Code | Codex |
-|---------|-------------|-------|
-| Agents/subagents | `agents/*.md` | No file-based equivalent |
-| Commands | `commands/*.md` | No file-based equivalent |
-| Hooks | `hooks/hooks.json` | `notify` in config.toml only |
-| MCP servers | `.mcp.json` | Configured in `config.toml` |
-| LSP servers | `.lsp.json` | No equivalent |
-| Memory | `agent-memory/` | No equivalent |
-| Rules | N/A | N/A (uses AGENTS.md) |
+| Feature | Claude Code | Codex | Notes |
+|---------|-------------|-------|-------|
+| Skills | `.claude/skills/<name>/SKILL.md` | `.codex/skills/<name>/SKILL.md` | Same Agent Skills standard, both file-based |
+| Agents/subagents | `.claude/agents/*.md` | Multi-agent roles in `config.toml` | Codex uses TOML config, not separate `.md` files |
+| Commands | `.claude/commands/*.md` | Custom prompts in `~/.codex/prompts/` **(deprecated)** | Deprecated — replaced by skills |
+| Hooks | `.claude/hooks/hooks.json` | `notify` array in `config.toml` | Codex only has a post-turn notify hook |
+| MCP servers | `.claude/.mcp.json` | `[mcp_servers.*]` in `config.toml` | Both STDIO and HTTP; configured per-project in `.codex/config.toml` |
+| LSP servers | `.claude/.lsp.json` | No equivalent | — |
+| Memory | `.claude/agent-memory/` | No equivalent | — |
+| Rules | N/A | N/A | Both use instruction files (CLAUDE.md / AGENTS.md) |
+| Project instructions | `CLAUDE.md` | `AGENTS.md` (+ `AGENTS.override.md`) | Both at project root, Codex walks subdirs |
+| Project config | `.claude/settings.json` | `.codex/config.toml` | Codex uses TOML, walked from root to CWD |
+
+---
+
+## MCP Server Configuration
+
+MCP servers are configured in `config.toml` (not a separate JSON file like Claude Code):
+
+```toml
+[mcp_servers.my-server]
+command = "npx"
+args = ["-y", "@my-org/my-mcp-server"]
+env = { API_KEY = "..." }
+enabled = true
+startup_timeout_sec = 30
+tool_timeout_sec = 60
+```
+
+Key fields: `command`, `args`, `env`, `env_vars`, `cwd`, `bearer_token_env_var`, `http_headers`, `env_http_headers`, `startup_timeout_sec`, `tool_timeout_sec`, `enabled`, `required`, `enabled_tools`, `disabled_tools`.
+
+Project-scoped MCP servers go in `.codex/config.toml` (trusted projects only).
+
+---
+
+## Custom Prompts (Deprecated)
+
+Custom prompts lived in `~/.codex/prompts/<name>.md` — flat Markdown files that became slash commands (`/prompts:<name>`). They supported `$1`–`$9` positional args and `$ARGUMENTS`.
+
+**Deprecated** — replaced by skills, which support both explicit and implicit invocation and can be shared via the repository.
 
 ---
 
@@ -169,6 +200,6 @@ Key config areas:
 **Codex builder** copies to `.codex/`:
 - `skills/<name>/` → `.codex/skills/<name>/` (preserves structure, same Agent Skills standard)
 
-**Everything else from upstream plugins is skipped** — Codex has no file-based equivalent for agents, commands, hooks, MCP, or LSP. Instructions go in `AGENTS.md` (user-managed, not promptkit-generated).
+**Agents, commands, hooks, MCP** — Codex has these features but they're all configured in `config.toml`, not as separate file trees. promptkit cannot merge TOML config fragments from plugins into a user's config, so these categories are skipped. If Codex later adds file-based equivalents (like `.codex/agents/*.md`), the builder can be updated.
 
 **Also valid**: `.agents/skills/` is an alternative skills location. However, `.codex/skills/` is the project-level convention that matches the platform's own directory (like `.cursor/skills/` and `.claude/skills/`). Using `.codex/` as the output dir keeps promptkit consistent across all three platforms.
